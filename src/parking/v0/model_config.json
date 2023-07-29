@@ -1,0 +1,20 @@
+{
+    "training": {
+      "num_cars": 286,
+      "max_x_cor": 28,
+      "max_y_cor": 30,
+      "num_garages": 1,
+      "lot_distribution_percentage": 0.5,
+      "target_start_occupancy": 0.5122192213078446,
+      "demand_curve_intercept" : 0.25
+    },
+    "evaluation": {
+      "num_cars": 601,
+      "max_x_cor": 40,
+      "max_y_cor": 50,
+      "num_garages": 2,
+      "lot_distribution_percentage": 0.5,
+      "target_start_occupancy": 0.5122192213078446,
+      "demand_curve_intercept" : 0.25
+    }
+}
