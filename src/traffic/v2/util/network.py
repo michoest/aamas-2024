@@ -9,7 +9,7 @@
 # - toll: Additional cost to use the edge as defined by delta-tolling
 # - total_cost: Sum of latency and toll
 
-from random import random
+import random
 
 import networkx as nx
 
@@ -29,13 +29,13 @@ def build_network(network):
     )
 
     # Set initial utilization
-    nx.set_edge_attributes(network, 0, "utilization")
+    nx.set_edge_attributes(network, 0, "flow")
 
     # Set initial latency based on utilization
     nx.set_edge_attributes(
         network,
         {
-            (v, w): attr["latency_fn"](attr["utilization"])
+            (v, w): attr["latency_fn"](attr["flow"])
             for v, w, attr in network.edges(data=True)
         },
         "latency",
@@ -47,6 +47,16 @@ def build_network(network):
     # Set tolls to zero
     nx.set_edge_attributes(network, 0.0, "toll")
 
+    # Set initial total cost
+    nx.set_edge_attributes(
+        network,
+        {
+            (v, w): attr["latency"] + attr["toll"]
+            for v, w, attr in network.edges(data=True)
+        },
+        "latency",
+    )
+
     return network
 
 
@@ -57,8 +67,6 @@ def create_braess_network():
         network, {i: (i / 3, 0) for i in range(len(network.nodes))}, "position"
     )
 
-    # Latency is defined in terms of the utilization, i.e., the share of cars on a
-    # specific road
     nx.set_edge_attributes(
         network,
         {
@@ -70,6 +78,24 @@ def create_braess_network():
         },
         "latency_params",
     )
+
+    return build_network(network)
+
+
+def create_double_braess_network():
+    network = nx.DiGraph([('A', 0), ('A', 2), (0, 1), (0, 2), (0, 'B'), (1, 2), (1, 3), (2, 3), (2, 'B')])
+
+    nx.set_edge_attributes(network, {
+        ('A', 0): (0, 11, 1),
+        ('A', 2): (121, 0, 1),
+        (0, 1): (0, 1, 1),
+        (0, 2): (11, 0, 1),
+        (0, 'B'): (121, 0, 1),
+        (1, 2): (1, 0, 1),
+        (1, 3): (11, 0, 1),
+        (2, 3): (0, 1, 1),
+        (2, 'B'): (0, 11, 1)
+    }, 'latency_params')
 
     return build_network(network)
 
