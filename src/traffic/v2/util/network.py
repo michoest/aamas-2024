@@ -1,6 +1,14 @@
 # Contains methods to build a traffic network as a networkx graph with additional
 # attributes.
 
+# The edges of the traffic network have the following attributes:
+# - flow: Number of cars currently using the edge
+# - latency_params: Parameters (a, b, c) of the edges' latency function
+# - latency_fn: lambda n: a + b * n ** c
+# - latency: Current latency value (=latency_fn(flow))
+# - toll: Additional cost to use the edge as defined by delta-tolling
+# - total_cost: Sum of latency and toll
+
 from random import random
 
 import networkx as nx
@@ -36,6 +44,9 @@ def build_network(network):
     # Allow all edges
     nx.set_edge_attributes(network, True, "allowed")
 
+    # Set tolls to zero
+    nx.set_edge_attributes(network, 0.0, "toll")
+
     return network
 
 
@@ -51,11 +62,11 @@ def create_braess_network():
     nx.set_edge_attributes(
         network,
         {
-            (0, 1): (0, 8, 1),
+            (0, 1): (1, 8, 1),
             (0, 2): (11, 0, 1),
             (1, 2): (1, 0, 1),
             (1, 3): (11, 0, 1),
-            (2, 3): (0, 8, 1),
+            (2, 3): (1, 8, 1),
         },
         "latency_params",
     )

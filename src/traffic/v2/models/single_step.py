@@ -1,6 +1,9 @@
 import random
 
 import networkx as nx
+import pandas as pd
+import numpy as np
+from tqdm import trange
 
 
 class Car:
@@ -89,3 +92,59 @@ class TrafficModel:
 
     def set_edge_restriction(self, edge, allowed=True):
         self.network.edges[edge]["allowed"] = allowed
+
+
+def run(model, number_of_steps, verbose=False):
+    routes = {id: [] for id in model.cars}
+
+    nx.set_edge_attributes(model.network, 0, "utilization")
+    model.update_latencies()
+
+    step_stats = []
+    car_stats = []
+    for step in (range if verbose else trange)(number_of_steps):
+        if verbose:
+            print(f"Step {step}:")
+            print(
+                f'Initial latency = {nx.get_edge_attributes(model.network, "latency")}'
+            )
+
+        for id, car in np.random.permutation(list(model.cars.items())):
+            for edge in zip(routes[id], routes[id][1:]):
+                model.decrease_utilization(edge)
+
+            # Let agents choose a route, given the network with allowed edges only
+            routes[id] = car.act(model.allowed_network, verbose=verbose)
+
+            for edge in zip(routes[id], routes[id][1:]):
+                model.increase_utilization(edge)
+
+        step_stats.append(
+            list(routes.values())
+            + list(nx.get_edge_attributes(model.network, "latency").values())
+            + [
+                nx.path_weight(model.network, route, "latency")
+                for car_id, route in routes.items()
+            ]
+        )
+
+        for id, car in model.cars.items():
+            car_stats.append(
+                {
+                    "step": step,
+                    "car_id": id,
+                    "source": car.source,
+                    "target": car.target,
+                    "route": tuple(routes[id]),
+                    "travel_time": nx.path_weight(model.network, routes[id], "latency"),
+                }
+            )
+
+    return pd.DataFrame(
+        step_stats,
+        columns=pd.MultiIndex.from_tuples(
+            [("route", car_id) for car_id in model.cars]
+            + [("latency", car_id) for car_id in model.network.edges]
+            + [("travel_time", car_id) for car_id in model.cars]
+        ),
+    ), pd.DataFrame(car_stats)

@@ -6,10 +6,17 @@ from collections import Counter
 import pandas as pd
 import networkx as nx
 import matplotlib as mpl
+import matplotlib.pyplot as plt
+
+
+def plot_social_welfare(step_stats):
+    (-step_stats["travel_time"]).mean(axis=1).plot(title="Social welfare")
+    plt.legend(["Social Welfare"])
 
 
 def plot_travel_time_per_route(car_stats):
-    car_stats.groupby("route")["travel_time"].plot(legend=True)
+    car_stats.groupby("route")["travel_time"].plot(title="Travel time per route")
+    plt.legend()
 
 
 def plot_cars_per_edge(car_stats):
@@ -21,11 +28,15 @@ def plot_cars_per_edge(car_stats):
                 )
             )
         )
-    ).plot()
+    ).plot(title="Number of cars per edge")
+    plt.legend()
 
 
 def plot_cars_per_route(car_stats):
-    car_stats.groupby(["step", "route"]).size().unstack().plot()
+    car_stats.groupby(["step", "route"]).size().unstack().plot(
+        title="Number of cars per route"
+    )
+    plt.legend()
 
 
 def draw_edge_utilization(model, car_stats, show_std=False):
@@ -49,6 +60,7 @@ def draw_edge_utilization(model, car_stats, show_std=False):
         .mean()
         .to_dict()
     )
+
     edge_utilization_std = (
         (
             pd.DataFrame(
@@ -80,23 +92,33 @@ def draw_edge_utilization(model, car_stats, show_std=False):
             edge: f"{edge_utilization[edge]:.2f}" for edge in edge_utilization
         }
 
+    plt.title("Mean utilization of edges")
     nx.draw(
         model.network,
         pos=nx.get_node_attributes(model.network, "position"),
         edgelist=edge_utilization.keys(),
         edge_color=edge_utilization.values(),
         edge_vmax=1.0,
+        edge_vmin=0.0,
+        with_labels=True,
+        font_size=10,
         edge_cmap=mpl.colormaps["Greys"],
     )
     nx.draw_networkx_edge_labels(
         model.network,
         pos=nx.get_node_attributes(model.network, "position"),
         edge_labels=edge_labels,
+        font_size=8,
     )
 
 
 def draw_latency_params(model):
-    nx.draw(model.network, pos=nx.get_node_attributes(model.network, "position"))
+    plt.title("Parameters for latency function l(n) = a + b * n ** c")
+    nx.draw(
+        model.network,
+        pos=nx.get_node_attributes(model.network, "position"),
+        connectionstyle="arc3,rad=0.2",
+    )
     nx.draw_networkx_edge_labels(
         model.network,
         pos=nx.get_node_attributes(model.network, "position"),
@@ -111,7 +133,40 @@ def draw_latency_params(model):
     )
 
 
-def plot_latency_increase_per_edge(car_stats):
+def plot_latency_increase_per_edge(model, step_stats):
+    free_flow_latencies = {
+        (v, w): attr["latency_fn"](0) for v, w, attr in model.network.edges(data=True)
+    }
+    mean_latencies = step_stats["latency"].mean().to_dict()
+
+    latency_increase = {
+        edge: (mean_latencies[edge] / (free_flow_latencies[edge] + 0.0001)) - 1.0
+        for edge in model.network.edges
+        if mean_latencies[edge] > free_flow_latencies[edge]
+    }
+
+    edge_labels = {edge: f"{increase:.1%}" for edge, increase in latency_increase.items()}
+
+    plt.title("Mean utilization of edges")
+    nx.draw(
+        model.network,
+        pos=nx.get_node_attributes(model.network, "position"),
+        edgelist=latency_increase.keys(),
+        edge_color=latency_increase.values(),
+        edge_vmax=1.0,
+        edge_vmin=0.0,
+        with_labels=True,
+        font_size=10,
+        edge_cmap=mpl.colormaps["Greys"],
+    )
+    nx.draw_networkx_edge_labels(
+        model.network,
+        pos=nx.get_node_attributes(model.network, "position"),
+        edge_labels=edge_labels,
+        font_size=8,
+    )
+
+    return mean_latencies
     # edge_latency = (pd.DataFrame(list(stats2.groupby('step')['route'].aggregate(lambda routes: Counter([edge for route in routes for edge in tuple(zip(route, route[1:]))])))) / len(model.cars)).mean().to_dict()
     # edge_utilization_std = (pd.DataFrame(list(stats2.groupby('step')['route'].aggregate(lambda routes: Counter([edge for route in routes for edge in tuple(zip(route, route[1:]))])))) / len(model.cars)).std().to_dict()
 
