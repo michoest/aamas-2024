@@ -54,7 +54,7 @@ def build_network(network):
             (v, w): attr["latency"] + attr["toll"]
             for v, w, attr in network.edges(data=True)
         },
-        "latency",
+        "total_cost",
     )
 
     return network

@@ -58,10 +58,14 @@ class Car:
 
 
 class TrafficModel:
-    def __init__(self, network, cars, anticipate_all_edges=True, verbose=False) -> None:
+    def __init__(self, network, cars, enable_tolling=False, beta=0.5, R=0.1,
+                 anticipate_all_edges=True, verbose=False) -> None:
         self.network = network
         self.cars = cars
         self.routes = {car_id: [] for car_id in self.cars}
+        self.tolling = enable_tolling
+        self.beta = beta
+        self.R = R
         self.anticipate_all_edges = anticipate_all_edges
         self.verbose = verbose
 
@@ -98,10 +102,52 @@ class TrafficModel:
 
     def set_flow(self, edge, flow):
         self.network.edges[edge]['flow'] = flow
-        self.update_latency(edge)
+        self.update_total_cost(edge)
 
     def set_edge_restriction(self, edge, allowed=True):
         self.network.edges[edge]["allowed"] = allowed
+
+    def update_toll(self, edge):
+        new_toll = self.beta * (self.network.edges[edge]['latency'] - self.network.edges[edge]['latency_fn'](0))
+        self.network.edges[edge]['total_cost'] = self.R * new_toll + (1 - self.R) * self.network.edges[edge]["toll"]
+
+    def update_tolls(self):
+        new_toll = {
+            (v, w): self.beta * (attr["latency"] - attr["latency_fn"](0))
+            for v, w, attr in self.network.edges(data=True)
+        }
+        nx.set_edge_attributes(
+            self.network,
+            {
+                (v, w): self.R * new_toll[(v, w)] + (1 - self.R) * attr["toll"]
+                for v, w, attr in self.network.edges(data=True)
+            },
+            "toll",
+        )
+
+    def update_total_cost(self, edge):
+        self.update_latency(edge)
+        if self.tolling:
+            self.update_toll(edge)
+            self.network.edges[edge]['total_cost'] = \
+                self.network.edges[edge]['latency'] + self.network.edges[edge]['toll']
+        else:
+            self.network.edges[edge]['total_cost'] = self.network.edges[edge]['latency']
+
+    def update_total_costs(self):
+        self.update_latencies()
+        if self.tolling:
+            self.update_tolls()
+            nx.set_edge_attributes(
+                self.network,
+                {
+                    (v, w): attr["latency"] + attr["toll"]
+                    for v, w, attr in self.network.edges(data=True)
+                },
+                "total_cost",
+            )
+        else:
+            nx.set_edge_attributes(self.network, get_edge_attributes(self.network, 'latency'), 'total_cost')
 
     def run_sequentially(self, number_of_steps):
         assert self._type in ['undefined', 'sequentially'], 'Cannot proceed sequentially from a single step model'
