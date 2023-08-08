@@ -60,7 +60,7 @@ def build_network(network):
     return network
 
 
-def create_braess_network():
+def create_braess_network(capacity=100):
     network = nx.DiGraph([(0, 1), (0, 2), (1, 2), (1, 3), (2, 3)])
 
     nx.set_node_attributes(
@@ -70,11 +70,11 @@ def create_braess_network():
     nx.set_edge_attributes(
         network,
         {
-            (0, 1): (1, 8, 1),
-            (0, 2): (11, 0, 1),
+            (0, 1): (2, 6 / capacity, 1),
+            (0, 2): (10, 0, 1),
             (1, 2): (1, 0, 1),
-            (1, 3): (11, 0, 1),
-            (2, 3): (1, 8, 1),
+            (1, 3): (10, 0, 1),
+            (2, 3): (2, 6 / capacity, 1),
         },
         "latency_params",
     )
@@ -82,22 +82,28 @@ def create_braess_network():
     return build_network(network)
 
 
-def create_double_braess_network():
-    network = nx.DiGraph([('A', 0), ('A', 2), (0, 1), (0, 2), (0, 'B'), (1, 2), (1, 3), (2, 3), (2, 'B')])
+# def create_double_braess_network(capacity=100):
+#     network = nx.DiGraph(
+#         [("A", 0), ("A", 2), (0, 1), (0, 2), (0, "B"), (1, 2), (1, 3), (2, 3), (2, "B")]
+#     )
 
-    nx.set_edge_attributes(network, {
-        ('A', 0): (0, 11, 1),
-        ('A', 2): (121, 0, 1),
-        (0, 1): (0, 1, 1),
-        (0, 2): (11, 0, 1),
-        (0, 'B'): (121, 0, 1),
-        (1, 2): (1, 0, 1),
-        (1, 3): (11, 0, 1),
-        (2, 3): (0, 1, 1),
-        (2, 'B'): (0, 11, 1)
-    }, 'latency_params')
+#     nx.set_edge_attributes(
+#         network,
+#         {
+#             ("A", 0): (0, 11, 1),
+#             ("A", 2): (121, 0, 1),
+#             (0, 1): (0, 8 / capacity, 1),
+#             (0, 2): (11, 0, 1),
+#             (0, "B"): (121, 0, 1),
+#             (1, 2): (1, 0, 1),
+#             (1, 3): (11, 0, 1),
+#             (2, 3): (0, 8 / capacity, 1),
+#             (2, "B"): (0, 11, 1),
+#         },
+#         "latency_params",
+#     )
 
-    return build_network(network)
+#     return build_network(network)
 
 
 def create_random_grid_network(number_of_rows, number_of_columns):
