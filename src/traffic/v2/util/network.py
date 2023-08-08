@@ -2,6 +2,7 @@
 # attributes.
 
 # The edges of the traffic network have the following attributes:
+# (anticipated adds +1 to flow for the subsequent car)
 # - flow: Number of cars currently using the edge
 # - latency_params: Parameters (a, b, c) of the edges' latency function
 # - latency_fn: lambda n: a + b * n ** c
@@ -46,6 +47,7 @@ def build_network(network):
 
     # Set tolls to zero
     nx.set_edge_attributes(network, 0.0, "toll")
+    nx.set_edge_attributes(network, 0.0, "anticipated_toll")
 
     # Set initial total cost
     nx.set_edge_attributes(
