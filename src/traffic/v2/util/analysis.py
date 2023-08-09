@@ -15,7 +15,7 @@ def plot_social_welfare(step_stats):
 
 
 def plot_travel_time_per_route(car_stats):
-    car_stats.groupby("route")["travel_time"].plot(title="Travel time per route")
+    car_stats.groupby(["step", "route"])["travel_time"].mean().unstack().plot(title="Travel time per route")
     plt.legend()
 
 
@@ -28,14 +28,23 @@ def plot_cars_per_edge(car_stats):
                 )
             )
         )
-    ).plot(title="Number of cars per edge")
+    ).fillna(0).plot(title="Number of cars per edge")
     plt.legend()
 
 
+def plot_latency_per_edge(step_stats):
+    step_stats['latency'].plot()
+
+
 def plot_cars_per_route(car_stats):
-    car_stats.groupby(["step", "route"]).size().unstack().plot(
+    car_stats.groupby(["step", "route"]).size().unstack().fillna(0).plot(
         title="Number of cars per route"
     )
+    plt.legend()
+
+
+def plot_toll_per_edge(step_stats):
+    step_stats['toll'].plot(title='Toll per edge')
     plt.legend()
 
 
@@ -147,7 +156,7 @@ def plot_latency_increase_per_edge(model, step_stats):
 
     edge_labels = {edge: f"{increase:.1%}" for edge, increase in latency_increase.items()}
 
-    plt.title("Mean utilization of edges")
+    plt.title("Latency increase per edge")
     nx.draw(
         model.network,
         pos=nx.get_node_attributes(model.network, "position"),
@@ -165,15 +174,3 @@ def plot_latency_increase_per_edge(model, step_stats):
         edge_labels=edge_labels,
         font_size=8,
     )
-
-    return mean_latencies
-    # edge_latency = (pd.DataFrame(list(stats2.groupby('step')['route'].aggregate(lambda routes: Counter([edge for route in routes for edge in tuple(zip(route, route[1:]))])))) / len(model.cars)).mean().to_dict()
-    # edge_utilization_std = (pd.DataFrame(list(stats2.groupby('step')['route'].aggregate(lambda routes: Counter([edge for route in routes for edge in tuple(zip(route, route[1:]))])))) / len(model.cars)).std().to_dict()
-
-    # if show_std:
-    #     edge_labels = {edge: f'{edge_utilization[edge]:.2f} (+- {edge_utilization_std[edge]:.1f})' for edge in edge_utilization}
-    # else:
-    #     edge_labels = {edge: f'{edge_utilization[edge]:.2f}' for edge in edge_utilization}
-
-    # nx.draw(model.network, pos=nx.get_node_attributes(model.network, 'position'), edgelist=edge_utilization.keys(), edge_color=edge_utilization.values(), edge_vmax=1.0, edge_cmap=mpl.colormaps['Greys'])
-    # nx.draw_networkx_edge_labels(model.network, pos=nx.get_node_attributes(model.network, 'position'), edge_labels=edge_labels)

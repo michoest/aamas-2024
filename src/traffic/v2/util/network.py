@@ -2,6 +2,7 @@
 # attributes.
 
 # The edges of the traffic network have the following attributes:
+# (anticipated adds +1 to flow for the subsequent car)
 # - flow: Number of cars currently using the edge
 # - latency_params: Parameters (a, b, c) of the edges' latency function
 # - latency_fn: lambda n: a + b * n ** c
@@ -9,9 +10,11 @@
 # - toll: Additional cost to use the edge as defined by delta-tolling
 # - total_cost: Sum of latency and toll
 
-from random import random
+import random
+import math
 
 import networkx as nx
+import numpy as np
 
 
 def build_network(network):
@@ -29,13 +32,13 @@ def build_network(network):
     )
 
     # Set initial utilization
-    nx.set_edge_attributes(network, 0, "utilization")
+    nx.set_edge_attributes(network, 0, "flow")
 
     # Set initial latency based on utilization
     nx.set_edge_attributes(
         network,
         {
-            (v, w): attr["latency_fn"](attr["utilization"])
+            (v, w): attr["latency_fn"](attr["flow"])
             for v, w, attr in network.edges(data=True)
         },
         "latency",
@@ -46,27 +49,36 @@ def build_network(network):
 
     # Set tolls to zero
     nx.set_edge_attributes(network, 0.0, "toll")
+    nx.set_edge_attributes(network, 0.0, "anticipated_toll")
+
+    # Set initial total cost
+    nx.set_edge_attributes(
+        network,
+        {
+            (v, w): attr["latency"] + attr["toll"]
+            for v, w, attr in network.edges(data=True)
+        },
+        "total_cost",
+    )
 
     return network
 
 
-def create_braess_network():
+def create_braess_network(capacity=100):
     network = nx.DiGraph([(0, 1), (0, 2), (1, 2), (1, 3), (2, 3)])
 
     nx.set_node_attributes(
-        network, {i: (i / 3, 0) for i in range(len(network.nodes))}, "position"
+        network, {0: (0, 1), 1: (0.5, 1), 2: (1, 0.5), 3: (1, 0)}, "position"
     )
 
-    # Latency is defined in terms of the utilization, i.e., the share of cars on a
-    # specific road
     nx.set_edge_attributes(
         network,
         {
-            (0, 1): (1, 8, 1),
-            (0, 2): (11, 0, 1),
+            (0, 1): (2, 6 / capacity, 1),
+            (0, 2): (10, 0, 1),
             (1, 2): (1, 0, 1),
-            (1, 3): (11, 0, 1),
-            (2, 3): (1, 8, 1),
+            (1, 3): (10, 0, 1),
+            (2, 3): (2, 6 / capacity, 1),
         },
         "latency_params",
     )
@@ -74,7 +86,63 @@ def create_braess_network():
     return build_network(network)
 
 
-def create_random_grid_network(number_of_rows, number_of_columns):
+def create_double_braess_network(capacity=100):
+    network = nx.DiGraph(
+        [("A", 0), ("A", 2), (0, 1), (0, 2), (0, "B"), (1, 2), (1, 3), (2, 3), (2, "B")]
+    )
+
+    nx.set_node_attributes(
+        network,
+        {
+            node: (
+                -math.cos(i * 2 * math.pi / (network.number_of_nodes() + 2)),
+                math.sin(i * 2 * math.pi / (network.number_of_nodes() + 2)),
+            )
+            for i, node in enumerate(network.nodes)
+        },
+        "position",
+    )
+
+    nx.set_edge_attributes(
+        network,
+        {
+            ("A", 0): (2, 6 / capacity, 1),
+            ("A", 2): (19, 0, 1),
+            (0, 1): (2, 6 / capacity, 1),
+            (0, 2): (10, 0, 1),
+            (0, "B"): (19, 0, 1),
+            (1, 2): (1, 0, 1),
+            (1, 3): (10, 0, 1),
+            (2, 3): (2, 6 / capacity, 1),
+            (2, "B"): (2, 6 / capacity, 1),
+        },
+        "latency_params",
+    )
+
+    return build_network(network)
+
+
+class LatencyGenerator:
+    pass
+
+
+class ListLatencyGenerator(LatencyGenerator):
+    def __init__(self, possible_params):
+        self.possible_params = possible_params
+
+    def __call__(self):
+        return random.choice(self.possible_params)
+
+
+class UniformLatencyGenerator(LatencyGenerator):
+    def __init__(self, a_min, a_max, b_min, b_max, c_min=1, c_max=1):
+        self.a_min, self.a_max, self.b_min, self.b_max, self.c_min, self.c_max = a_min, a_max, b_min, b_max, c_min, c_max
+
+    def __call__(self):
+        return tuple(np.random.uniform(low=[self.a_min, self.b_min, self.c_min], high=[self.a_max, self.b_max, self.c_max]))
+
+
+def create_random_grid_network(number_of_rows, number_of_columns, latency_generator):
     network = nx.grid_2d_graph(
         number_of_rows, number_of_columns, create_using=nx.DiGraph
     )
@@ -90,7 +158,7 @@ def create_random_grid_network(number_of_rows, number_of_columns):
     nx.set_edge_attributes(
         network,
         {
-            edge: random.choice([(1, 0, 1), (11, 0, 1), (0, 8, 1)])
+            edge: latency_generator()
             for edge in network.edges
         },
         "latency_params",
