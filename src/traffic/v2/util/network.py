@@ -14,6 +14,7 @@ import random
 import math
 
 import networkx as nx
+import numpy as np
 
 
 def build_network(network):
@@ -121,7 +122,27 @@ def create_double_braess_network(capacity=100):
     return build_network(network)
 
 
-def create_random_grid_network(number_of_rows, number_of_columns):
+class LatencyGenerator:
+    pass
+
+
+class ListLatencyGenerator(LatencyGenerator):
+    def __init__(self, possible_params):
+        self.possible_params = possible_params
+
+    def __call__(self):
+        return random.choice(self.possible_params)
+
+
+class UniformLatencyGenerator(LatencyGenerator):
+    def __init__(self, a_min, a_max, b_min, b_max, c_min=1, c_max=1):
+        self.a_min, self.a_max, self.b_min, self.b_max, self.c_min, self.c_max = a_min, a_max, b_min, b_max, c_min, c_max
+
+    def __call__(self):
+        return tuple(np.random.uniform(low=[self.a_min, self.b_min, self.c_min], high=[self.a_max, self.b_max, self.c_max]))
+
+
+def create_random_grid_network(number_of_rows, number_of_columns, latency_generator):
     network = nx.grid_2d_graph(
         number_of_rows, number_of_columns, create_using=nx.DiGraph
     )
@@ -137,7 +158,7 @@ def create_random_grid_network(number_of_rows, number_of_columns):
     nx.set_edge_attributes(
         network,
         {
-            edge: random.choice([(1, 0, 1), (11, 0, 1), (0, 8, 1)])
+            edge: latency_generator()
             for edge in network.edges
         },
         "latency_params",
