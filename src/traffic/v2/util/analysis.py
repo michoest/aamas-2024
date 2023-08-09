@@ -32,6 +32,10 @@ def plot_cars_per_edge(car_stats):
     plt.legend()
 
 
+def plot_latency_per_edge(step_stats):
+    step_stats['latency'].plot()
+
+
 def plot_cars_per_route(car_stats):
     car_stats.groupby(["step", "route"]).size().unstack().fillna(0).plot(
         title="Number of cars per route"
