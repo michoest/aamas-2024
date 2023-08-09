@@ -28,12 +28,12 @@ def plot_cars_per_edge(car_stats):
                 )
             )
         )
-    ).plot(title="Number of cars per edge")
+    ).fillna(0).plot(title="Number of cars per edge")
     plt.legend()
 
 
 def plot_cars_per_route(car_stats):
-    car_stats.groupby(["step", "route"]).size().unstack().plot(
+    car_stats.groupby(["step", "route"]).size().unstack().fillna(0).plot(
         title="Number of cars per route"
     )
     plt.legend()
