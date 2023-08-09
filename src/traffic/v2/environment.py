@@ -292,6 +292,7 @@ class TrafficModel:
             self.step_statistics.append(
                 list(self.routes.values())
                 + list(nx.get_edge_attributes(self.network, "flow").values())
+                + list(nx.get_edge_attributes(self.network, "toll").values())
                 + list(nx.get_edge_attributes(self.network, "latency").values())
             )
 
@@ -360,6 +361,7 @@ class TrafficModel:
             columns=pd.MultiIndex.from_tuples(
                 [("route", car_id) for car_id in self.cars]
                 + [("flow", edge_id) for edge_id in self.network.edges]
+                + [("toll", edge) for edge in self.network.edges]
                 + [("latency", edge_id) for edge_id in self.network.edges]
             ),
         ), pd.DataFrame(self.car_statistics)
