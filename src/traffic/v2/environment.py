@@ -19,7 +19,7 @@ class Car:
         *,
         anticipation_strategy='route',
         created_at_step=0,
-        verbose=True,
+        verbose=False,
     ) -> None:
         assert anticipation_strategy in ['edge', 'route', 'edge_tolls', 'route_tolls'], 'Unknown anticipation strategy'
 
