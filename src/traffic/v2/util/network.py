@@ -65,8 +65,11 @@ def build_network(network):
 def create_braess_network(capacity=100):
     network = nx.DiGraph([(0, 1), (0, 2), (1, 2), (1, 3), (2, 3)])
 
+    # nx.set_node_attributes(
+    #     network, {i: (i / 3, 0) for i in range(len(network.nodes))}, "position"
+    # )
     nx.set_node_attributes(
-        network, {i: (i / 3, 0) for i in range(len(network.nodes))}, "position"
+        network, {0: (0, 1), 1: (0.5, 1), 2: (1, 0.5), 3: (1, 0)}, "position"
     )
 
     nx.set_edge_attributes(
