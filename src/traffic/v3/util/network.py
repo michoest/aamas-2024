@@ -16,6 +16,8 @@ import math
 import networkx as nx
 import numpy as np
 
+from src.traffic.v3.environment import Car
+
 
 def build_network(network):
     # Create latency functions from parameters
@@ -24,8 +26,7 @@ def build_network(network):
         {
             (v, w): lambda u, a=attr["latency_params"][0], b=attr["latency_params"][
                 1
-            ], c=attr["latency_params"][2]: a
-            + b * u**c
+            ], c=attr["latency_params"][2]: a + b * u ** c
             for v, w, attr in network.edges(data=True)
         },
         "latency_fn",
@@ -122,6 +123,27 @@ def create_double_braess_network(capacity=100):
     return build_network(network)
 
 
+def create_cars(network, cars_per_edge: int = 3, goal_distribution=None, seed: int = 42):
+    if goal_distribution is None:
+        goal_distribution = {1.0: (0, 3)}
+
+    rng = np.random.RandomState(seed)
+    created_cars = {}
+    for v, w, attr in network.edges(data=True):
+        for car in range(cars_per_edge):
+            # Draw source and target
+            s_t = list(goal_distribution.values())[
+                rng.choice(len(goal_distribution.values()), p=list(goal_distribution.keys()))]
+            # Set cars on the edge evenly spaces
+            progress = (1 / attr['latency_fn'](cars_per_edge)) * car
+            # Add to the list of cars
+            created_cars[len(created_cars) + car] = Car(len(created_cars) + car, s_t[0], s_t[1],
+                                                        1 / attr['latency_fn'](cars_per_edge),
+                                                        position=((v, w), progress if progress < 1.0 else 1.0))
+
+    return created_cars
+
+
 class LatencyGenerator:
     pass
 
@@ -139,7 +161,8 @@ class UniformLatencyGenerator(LatencyGenerator):
         self.a_min, self.a_max, self.b_min, self.b_max, self.c_min, self.c_max = a_min, a_max, b_min, b_max, c_min, c_max
 
     def __call__(self):
-        return tuple(np.random.uniform(low=[self.a_min, self.b_min, self.c_min], high=[self.a_max, self.b_max, self.c_max]))
+        return tuple(np.random.uniform(low=[self.a_min, self.b_min, self.c_min],
+                                       high=[self.a_max, self.b_max, self.c_max]))
 
 
 def create_random_grid_network(number_of_rows, number_of_columns, latency_generator):

@@ -335,7 +335,6 @@ class TrafficModel:
                             f"Car {car.id} reached its target after {step - car.created_at_step} steps."
                         )
 
-                    # source = np.random.randint(3)
                     car.reset(car.source, step)
                     routes_taken[car.id] = [car.source]
 
@@ -349,6 +348,14 @@ class TrafficModel:
                 [car for car in self.cars.values() if car.position[1] == 1.0]
             ):
                 self.routes[car.id] = car.act(self.allowed_network)
+
+                if not isinstance(self.routes[car.id], list):
+                    # Reset if no path to target exists and find path again
+                    self.decrease_flow(car.position[0])
+                    car.reset(car.source, step)
+                    routes_taken[car.id] = [car.source]
+                    self.routes[car.id] = car.act(self.allowed_network)
+
                 car.position = (car.position[0][1], self.routes[car.id][1]), 0.0
                 self.increase_flow(car.position[0])
                 routes_taken[car.id].append(car.position[0][1])
