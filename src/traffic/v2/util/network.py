@@ -11,6 +11,7 @@
 # - total_cost: Sum of latency and toll
 
 import random
+import math
 
 import networkx as nx
 
@@ -65,9 +66,6 @@ def build_network(network):
 def create_braess_network(capacity=100):
     network = nx.DiGraph([(0, 1), (0, 2), (1, 2), (1, 3), (2, 3)])
 
-    # nx.set_node_attributes(
-    #     network, {i: (i / 3, 0) for i in range(len(network.nodes))}, "position"
-    # )
     nx.set_node_attributes(
         network, {0: (0, 1), 1: (0.5, 1), 2: (1, 0.5), 3: (1, 0)}, "position"
     )
@@ -87,28 +85,40 @@ def create_braess_network(capacity=100):
     return build_network(network)
 
 
-# def create_double_braess_network(capacity=100):
-#     network = nx.DiGraph(
-#         [("A", 0), ("A", 2), (0, 1), (0, 2), (0, "B"), (1, 2), (1, 3), (2, 3), (2, "B")]
-#     )
+def create_double_braess_network(capacity=100):
+    network = nx.DiGraph(
+        [("A", 0), ("A", 2), (0, 1), (0, 2), (0, "B"), (1, 2), (1, 3), (2, 3), (2, "B")]
+    )
 
-#     nx.set_edge_attributes(
-#         network,
-#         {
-#             ("A", 0): (0, 11, 1),
-#             ("A", 2): (121, 0, 1),
-#             (0, 1): (0, 8 / capacity, 1),
-#             (0, 2): (11, 0, 1),
-#             (0, "B"): (121, 0, 1),
-#             (1, 2): (1, 0, 1),
-#             (1, 3): (11, 0, 1),
-#             (2, 3): (0, 8 / capacity, 1),
-#             (2, "B"): (0, 11, 1),
-#         },
-#         "latency_params",
-#     )
+    nx.set_node_attributes(
+        network,
+        {
+            node: (
+                -math.cos(i * 2 * math.pi / (network.number_of_nodes() + 2)),
+                math.sin(i * 2 * math.pi / (network.number_of_nodes() + 2)),
+            )
+            for i, node in enumerate(network.nodes)
+        },
+        "position",
+    )
 
-#     return build_network(network)
+    nx.set_edge_attributes(
+        network,
+        {
+            ("A", 0): (2, 6 / capacity, 1),
+            ("A", 2): (19, 0, 1),
+            (0, 1): (2, 6 / capacity, 1),
+            (0, 2): (10, 0, 1),
+            (0, "B"): (19, 0, 1),
+            (1, 2): (1, 0, 1),
+            (1, 3): (10, 0, 1),
+            (2, 3): (2, 6 / capacity, 1),
+            (2, "B"): (2, 6 / capacity, 1),
+        },
+        "latency_params",
+    )
+
+    return build_network(network)
 
 
 def create_random_grid_network(number_of_rows, number_of_columns):
