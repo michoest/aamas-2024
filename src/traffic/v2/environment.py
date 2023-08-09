@@ -147,9 +147,6 @@ class TrafficModel:
         self.R = R
         self.verbose = verbose
 
-        # Parameters for delta-tolling
-        self.beta, self.R = beta, R
-
         self.step_statistics = []
         self.car_statistics = []
         self.current_step = 0
