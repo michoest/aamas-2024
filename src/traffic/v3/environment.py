@@ -164,7 +164,7 @@ class TrafficModel:
             "latency_fn"
         ](self.network.edges[edge]["flow"] + 1)
 
-        # Update tolls
+        # Update toll to delta-tolling algorithm
         new_toll = self.beta * (
             self.network.edges[edge]["latency"]
             - self.network.edges[edge]["latency_fn"](0)
@@ -180,15 +180,6 @@ class TrafficModel:
             self.R * new_anticipated_toll
             + (1 - self.R) * self.network.edges[edge]["anticipated_toll"]
         )
-
-        # Update total costs
-        # self.network.edges[edge]["total_cost"] = (
-        #     self.network.edges[edge]["latency"] + self.network.edges[edge]["toll"]
-        # )
-        # self.network.edges[edge]["anticipated_total_cost"] = (
-        #     self.network.edges[edge]["anticipated_latency"]
-        #     + self.network.edges[edge]["anticipated_toll"]
-        # )
 
     def update_network_attributes(self):
         # Update latencies
@@ -209,7 +200,7 @@ class TrafficModel:
             "anticipated_latency",
         )
 
-        # Update tolls
+        # Update tolls according to delta-tolling algorithm
         new_tolls = {
             (v, w): self.beta * (attr["latency"] - attr["latency_fn"](0))
             for v, w, attr in self.network.edges(data=True)
@@ -235,24 +226,6 @@ class TrafficModel:
             },
             "anticipated_toll",
         )
-
-        # Update total costs
-        # nx.set_edge_attributes(
-        #     self.network,
-        #     {
-        #         (v, w): attr["latency"] + attr["toll"]
-        #         for v, w, attr in self.network.edges(data=True)
-        #     },
-        #     "total_cost",
-        # )
-        # nx.set_edge_attributes(
-        #     self.network,
-        #     {
-        #         (v, w): attr["anticipated_latency"] + attr["anticipated_toll"]
-        #         for v, w, attr in self.network.edges(data=True)
-        #     },
-        #     "anticipated_total_cost",
-        # )
 
     def run_sequentially(self, number_of_steps):
         assert self._type in [
@@ -284,8 +257,8 @@ class TrafficModel:
             self.step_statistics.append(
                 list(self.routes.values())
                 + list(nx.get_edge_attributes(self.network, "flow").values())
-                + list(nx.get_edge_attributes(self.network, "toll").values())
                 + list(nx.get_edge_attributes(self.network, "latency").values())
+                + list(nx.get_edge_attributes(self.network, "toll").values())
             )
 
             if self.verbose:
@@ -360,8 +333,8 @@ class TrafficModel:
             columns=pd.MultiIndex.from_tuples(
                 [("route", car_id) for car_id in self.cars]
                 + [("flow", edge_id) for edge_id in self.network.edges]
-                + [("toll", edge) for edge in self.network.edges]
                 + [("latency", edge_id) for edge_id in self.network.edges]
+                + [("toll", edge_id) for edge_id in self.network.edges]
             ),
         ), pd.DataFrame(self.car_statistics)
 
@@ -389,6 +362,7 @@ class TrafficModel:
 
             self.step_statistics.append(
                 list(self.routes.values())
+                + list(nx.get_edge_attributes(self.network, "flow").values())
                 + list(nx.get_edge_attributes(self.network, "latency").values())
                 + list(nx.get_edge_attributes(self.network, "toll").values())
                 + [
@@ -415,6 +389,7 @@ class TrafficModel:
             self.step_statistics,
             columns=pd.MultiIndex.from_tuples(
                 [("route", car_id) for car_id in self.cars]
+                + [("flow", edge) for edge in self.network.edges]
                 + [("latency", edge) for edge in self.network.edges]
                 + [("toll", edge) for edge in self.network.edges]
                 + [("travel_time", car_id) for car_id in self.cars]
