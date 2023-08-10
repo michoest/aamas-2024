@@ -209,7 +209,7 @@ class OneXLatencyGenerator(LatencyGenerator):
 
     def __call__(self):
         return random.choices(
-            [(1 / self.capacity, 1 / self.capacity, 1), (1, 0, 1)],
+            [(1 / (self.capacity + 1), 1 / (self.capacity + 1), 1), (1, 0, 1)],
             weights=[self.q, 1.0 - self.q],
         )[0]
 
