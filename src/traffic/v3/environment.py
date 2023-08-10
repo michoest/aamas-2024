@@ -19,6 +19,7 @@ class Car:
         anticipation_strategy="route",
         created_at_step=0,
         value_of_time=1,
+        value_of_money=1,
         verbose=False,
     ) -> None:
         assert anticipation_strategy in [
@@ -36,6 +37,7 @@ class Car:
         self.position = position if position is not None else ((source, source), 1.0)
         self.anticipation_strategy = anticipation_strategy
         self.value_of_time = value_of_time
+        self.value_of_money = value_of_money
         self.verbose = verbose
 
     def __repr__(self) -> str:
@@ -61,7 +63,7 @@ class Car:
                 # tolls)
                 latencies = {
                     (v, w): attr["anticipated_latency"] * self.value_of_time
-                    + attr["toll"]
+                    + attr["toll"] * self.value_of_money
                     for v, w, attr in network.edges(data=True)
                 }
             elif self.anticipation_strategy == "edge":
@@ -83,7 +85,7 @@ class Car:
                         else attr["latency"]
                     )
                     * self.value_of_time
-                    + attr["toll"]
+                    + attr["toll"] * self.value_of_money
                     for v, w, attr in network.edges(data=True)
                 }
             else:
@@ -180,13 +182,13 @@ class TrafficModel:
         )
 
         # Update total costs
-        self.network.edges[edge]["total_cost"] = (
-            self.network.edges[edge]["latency"] + self.network.edges[edge]["toll"]
-        )
-        self.network.edges[edge]["anticipated_total_cost"] = (
-            self.network.edges[edge]["anticipated_latency"]
-            + self.network.edges[edge]["anticipated_toll"]
-        )
+        # self.network.edges[edge]["total_cost"] = (
+        #     self.network.edges[edge]["latency"] + self.network.edges[edge]["toll"]
+        # )
+        # self.network.edges[edge]["anticipated_total_cost"] = (
+        #     self.network.edges[edge]["anticipated_latency"]
+        #     + self.network.edges[edge]["anticipated_toll"]
+        # )
 
     def update_network_attributes(self):
         # Update latencies
@@ -235,22 +237,22 @@ class TrafficModel:
         )
 
         # Update total costs
-        nx.set_edge_attributes(
-            self.network,
-            {
-                (v, w): attr["latency"] + attr["toll"]
-                for v, w, attr in self.network.edges(data=True)
-            },
-            "total_cost",
-        )
-        nx.set_edge_attributes(
-            self.network,
-            {
-                (v, w): attr["anticipated_latency"] + attr["anticipated_toll"]
-                for v, w, attr in self.network.edges(data=True)
-            },
-            "anticipated_total_cost",
-        )
+        # nx.set_edge_attributes(
+        #     self.network,
+        #     {
+        #         (v, w): attr["latency"] + attr["toll"]
+        #         for v, w, attr in self.network.edges(data=True)
+        #     },
+        #     "total_cost",
+        # )
+        # nx.set_edge_attributes(
+        #     self.network,
+        #     {
+        #         (v, w): attr["anticipated_latency"] + attr["anticipated_toll"]
+        #         for v, w, attr in self.network.edges(data=True)
+        #     },
+        #     "anticipated_total_cost",
+        # )
 
     def run_sequentially(self, number_of_steps):
         assert self._type in [
