@@ -16,7 +16,7 @@ import math
 import networkx as nx
 import numpy as np
 
-from src.traffic.v3.environment import Car
+from environment import Car
 
 
 def build_network(network):
