@@ -4,7 +4,6 @@ from collections import Counter
 import networkx as nx
 import numpy as np
 import pandas as pd
-from networkx import get_edge_attributes
 from tqdm import trange
 
 
@@ -17,11 +16,17 @@ class Car:
         speed=0,
         position=None,
         *,
-        anticipation_strategy='route',
+        anticipation_strategy="route",
         created_at_step=0,
+        value_of_time=1,
         verbose=False,
     ) -> None:
-        assert anticipation_strategy in ['edge', 'route', 'edge_tolls', 'route_tolls'], 'Unknown anticipation strategy'
+        assert anticipation_strategy in [
+            "edge",
+            "route",
+            "edge_tolls",
+            "route_tolls",
+        ], "Unknown anticipation strategy"
 
         self.id = id
         self.source = source
@@ -30,6 +35,7 @@ class Car:
         self.created_at_step = created_at_step
         self.position = position if position is not None else ((source, source), 1.0)
         self.anticipation_strategy = anticipation_strategy
+        self.value_of_time = value_of_time
         self.verbose = verbose
 
     def __repr__(self) -> str:
@@ -43,84 +49,64 @@ class Car:
         ):
             return current_node
         else:
-            if self.anticipation_strategy == 'route':
+            # Define edge weights according to anticipation_strategy
+            if self.anticipation_strategy == "route":
                 # Find the shortest path based on anticipated latencies
-                choice = random.choice(
-                    list(
-                        nx.all_shortest_paths(
-                            network,
-                            current_node,
-                            self.target,
-                            weight="anticipated_latency",
-                        )
-                    )
-                )
-
-                if self.verbose:
-                    print(f'Latencies: {get_edge_attributes(network, "anticipated_latency")}.')
-            elif self.anticipation_strategy == 'route_tolls':
-                # Find the shortest path based on the anticipated total cost (including tolls)
-                choice = random.choice(
-                    list(
-                        nx.all_shortest_paths(
-                            network,
-                            current_node,
-                            self.target,
-                            weight="anticipated_total_cost",
-                        )
-                    )
-                )
-
-                if self.verbose:
-                    print(f'Costs: {get_edge_attributes(network, "anticipated_total_cost")}.')
-            elif self.anticipation_strategy == 'edge':
-                # Find the shortest path based on the actual latencies with only the next edge being anticipated
-                final_latencies = {
-                    (v, w): attr['anticipated_latency'] if v == self.position[0][1] else attr['latency']
+                latencies = {
+                    (v, w): attr["anticipated_latency"]
                     for v, w, attr in network.edges(data=True)
                 }
-
-                if self.verbose:
-                    print(f'Latencies: {final_latencies}.')
-
-                choice = random.choice(
-                    list(
-                        nx.all_shortest_paths(
-                            network,
-                            current_node,
-                            self.target,
-                            weight=lambda v, w, _: final_latencies[(v, w)],
-                        )
+            elif self.anticipation_strategy == "route_tolls":
+                # Find the shortest path based on the anticipated total cost (including
+                # tolls)
+                latencies = {
+                    (v, w): attr["anticipated_latency"] * self.value_of_time
+                    + attr["toll"]
+                    for v, w, attr in network.edges(data=True)
+                }
+            elif self.anticipation_strategy == "edge":
+                # Find the shortest path based on the actual latencies with only the
+                # next edge being anticipated
+                latencies = {
+                    (v, w): attr["anticipated_latency"]
+                    if v == current_node
+                    else attr["latency"]
+                    for v, w, attr in network.edges(data=True)
+                }
+            elif self.anticipation_strategy == "edge_tolls":
+                # Find the shortest path based on the actual total costs with only the
+                # next edge being anticipated
+                latencies = {
+                    (v, w): (
+                        attr["anticipated_latency"]
+                        if v == current_node
+                        else attr["latency"]
                     )
-                )
+                    * self.value_of_time
+                    + attr["toll"]
+                    for v, w, attr in network.edges(data=True)
+                }
             else:
-                # Find the shortest path based on the actual total costs with only the next edge being anticipated
-                final_cost = {
-                    (v, w): attr['anticipated_total_cost'] if v == self.position[0][1] else attr['total_cost']
-                    for v, w, attr in network.edges(data=True)
-                }
+                raise ValueError()
 
-                if self.verbose:
-                    print(f'Costs: {final_cost}.')
-
-                choice = random.choice(
-                    list(
-                        nx.all_shortest_paths(
-                            network,
-                            current_node,
-                            self.target,
-                            weight=lambda v, w, _: final_cost[(v, w)],
-                        )
+            chosen_route = random.choice(
+                list(
+                    nx.all_shortest_paths(
+                        network,
+                        current_node,
+                        self.target,
+                        weight=lambda v, w, _: latencies[(v, w)],
                     )
                 )
-            self.speed = 1 / (
-                network.edges[(choice[0], choice[1])]["anticipated_latency"]
             )
 
-            if self.verbose:
-                print(f"Car {self.id} at {current_node} chooses {choice[1]}.")
+            self.speed = 1 / (network.edges[chosen_route[:2]]["anticipated_latency"])
 
-            return choice
+            if self.verbose:
+                print(f"Latencies for routing decision: {latencies}.")
+                print(f"Car {self.id} at {current_node} chooses {chosen_route[1]}.")
+
+            return chosen_route
 
     def reset(self, source, step):
         self.source = source
@@ -131,15 +117,7 @@ class Car:
 
 
 class TrafficModel:
-    def __init__(
-        self,
-        network,
-        cars,
-        *,
-        beta=0.5,
-        R=0.1,
-        verbose=False
-    ) -> None:
+    def __init__(self, network, cars, *, beta=0.5, R=0.1, verbose=False) -> None:
         self.network = network
         self.cars = cars
         self.routes = {car_id: [] for car_id in self.cars}
@@ -168,11 +146,11 @@ class TrafficModel:
         self.network.edges[edge]["allowed"] = allowed
 
     def decrease_flow(self, edge):
-        self.network.edges[edge]['flow'] = self.network.edges[edge]["flow"] - 1
+        self.network.edges[edge]["flow"] = self.network.edges[edge]["flow"] - 1
         self.update_edge_attributes(edge)
 
     def increase_flow(self, edge):
-        self.network.edges[edge]['flow'] = self.network.edges[edge]["flow"] + 1
+        self.network.edges[edge]["flow"] = self.network.edges[edge]["flow"] + 1
         self.update_edge_attributes(edge)
 
     def update_edge_attributes(self, edge):
@@ -180,24 +158,35 @@ class TrafficModel:
         self.network.edges[edge]["latency"] = self.network.edges[edge]["latency_fn"](
             self.network.edges[edge]["flow"]
         )
-        self.network.edges[edge]["anticipated_latency"] = self.network.edges[edge]["latency_fn"](
-            self.network.edges[edge]["flow"] + 1)
+        self.network.edges[edge]["anticipated_latency"] = self.network.edges[edge][
+            "latency_fn"
+        ](self.network.edges[edge]["flow"] + 1)
 
         # Update tolls
-        new_toll = self.beta * (self.network.edges[edge]['latency'] - self.network.edges[edge]['latency_fn'](0))
-        self.network.edges[edge]['toll'] = self.R * new_toll + (1 - self.R) * self.network.edges[edge]["toll"]
-        new_anticipated_toll = self.beta * (
-                self.network.edges[edge]['anticipated_latency'] - self.network.edges[edge]['latency_fn'](0)
+        new_toll = self.beta * (
+            self.network.edges[edge]["latency"]
+            - self.network.edges[edge]["latency_fn"](0)
         )
-        self.network.edges[edge]['anticipated_toll'] = self.R * new_anticipated_toll + (
-                1 - self.R
-        ) * self.network.edges[edge]["anticipated_toll"]
+        self.network.edges[edge]["toll"] = (
+            self.R * new_toll + (1 - self.R) * self.network.edges[edge]["toll"]
+        )
+        new_anticipated_toll = self.beta * (
+            self.network.edges[edge]["anticipated_latency"]
+            - self.network.edges[edge]["latency_fn"](0)
+        )
+        self.network.edges[edge]["anticipated_toll"] = (
+            self.R * new_anticipated_toll
+            + (1 - self.R) * self.network.edges[edge]["anticipated_toll"]
+        )
 
         # Update total costs
-        self.network.edges[edge]['total_cost'] = \
-            self.network.edges[edge]['latency'] + self.network.edges[edge]['toll']
-        self.network.edges[edge]['anticipated_total_cost'] = \
-            self.network.edges[edge]['anticipated_latency'] + self.network.edges[edge]['anticipated_toll']
+        self.network.edges[edge]["total_cost"] = (
+            self.network.edges[edge]["latency"] + self.network.edges[edge]["toll"]
+        )
+        self.network.edges[edge]["anticipated_total_cost"] = (
+            self.network.edges[edge]["anticipated_latency"]
+            + self.network.edges[edge]["anticipated_toll"]
+        )
 
     def update_network_attributes(self):
         # Update latencies
@@ -238,7 +227,8 @@ class TrafficModel:
         nx.set_edge_attributes(
             self.network,
             {
-                (v, w): self.R * new_anticipated_tolls[(v, w)] + (1 - self.R) * attr["anticipated_toll"]
+                (v, w): self.R * new_anticipated_tolls[(v, w)]
+                + (1 - self.R) * attr["anticipated_toll"]
                 for v, w, attr in self.network.edges(data=True)
             },
             "anticipated_toll",
