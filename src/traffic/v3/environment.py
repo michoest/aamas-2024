@@ -238,7 +238,7 @@ class TrafficModel:
             car.id: [car.position[0][0], car.position[0][1]]
             for car in self.cars.values()
         }
-        for step in range(number_of_steps):
+        for step in (range if self.verbose else trange)(number_of_steps):
             if self.verbose:
                 print(f"Step {step}:")
                 print(
