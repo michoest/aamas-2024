@@ -4,7 +4,7 @@
 # The edges of the traffic network have the following attributes:
 # (anticipated adds +1 to flow for the subsequent car)
 # - flow: Number of cars currently using the edge
-# - latency_params: Parameters (a, b, c) of the edges' latency function
+# - latency_params: Parameters (a, b, c, d) of the edges' latency function
 # - latency_fn: lambda n: a + b * n ** c
 # - latency: Current latency value (=latency_fn(flow))
 # - toll: Additional cost to use the edge as defined by delta-tolling
@@ -19,19 +19,21 @@ import numpy as np
 from environment import Car
 
 
-def build_network(network):
-    # Create latency functions from parameters
+def update_latency_functions(network):
     nx.set_edge_attributes(
         network,
         {
-            (v, w): lambda u, a=attr["latency_params"][0], b=attr["latency_params"][
-                1
-            ], c=attr["latency_params"][2]: a
-            + b * u**c
+            (v, w): lambda n, params=attr["latency_params"]: params[0]
+            + params[1] * (n / params[2]) ** params[3]
             for v, w, attr in network.edges(data=True)
         },
         "latency_fn",
     )
+
+
+def build_network(network):
+    # Create latency functions from parameters: l(n) = a + b * (n / c) ** d
+    update_latency_functions(network)
 
     # Set initial utilization
     nx.set_edge_attributes(network, 0, "flow")
@@ -53,16 +55,6 @@ def build_network(network):
     nx.set_edge_attributes(network, 0.0, "toll")
     nx.set_edge_attributes(network, 0.0, "anticipated_toll")
 
-    # Set initial total cost
-    nx.set_edge_attributes(
-        network,
-        {
-            (v, w): attr["latency"] + attr["toll"]
-            for v, w, attr in network.edges(data=True)
-        },
-        "total_cost",
-    )
-
     return network
 
 
@@ -70,17 +62,17 @@ def create_braess_network(capacity=100):
     network = nx.DiGraph([(0, 1), (0, 2), (1, 2), (1, 3), (2, 3)])
 
     nx.set_node_attributes(
-        network, {0: (0, 1), 1: (0.5, 1), 2: (1, 0.5), 3: (1, 0)}, "position"
+        network, {0: (0, 0), 1: (0, 1), 2: (1, 0), 3: (1, 1)}, "position"
     )
 
     nx.set_edge_attributes(
         network,
         {
-            (0, 1): (2, 6 / capacity, 1),
-            (0, 2): (10, 0, 1),
-            (1, 2): (1, 0, 1),
-            (1, 3): (10, 0, 1),
-            (2, 3): (2, 6 / capacity, 1),
+            (0, 1): (2, 6, capacity, 1),
+            (0, 2): (10, 0, 1, 1),
+            (1, 2): (1, 0, 1, 1),
+            (1, 3): (10, 0, 1, 1),
+            (2, 3): (2, 6, capacity, 1),
         },
         "latency_params",
     )
@@ -95,28 +87,22 @@ def create_double_braess_network(capacity=100):
 
     nx.set_node_attributes(
         network,
-        {
-            node: (
-                -math.cos(i * 2 * math.pi / (network.number_of_nodes() + 2)),
-                math.sin(i * 2 * math.pi / (network.number_of_nodes() + 2)),
-            )
-            for i, node in enumerate(network.nodes)
-        },
+        {"A": (0, -1), 0: (0, 0), 1: (0, 1), 2: (1, 0), 3: (1, 1), "B": (1, -1)},
         "position",
     )
 
     nx.set_edge_attributes(
         network,
         {
-            ("A", 0): (2, 6 / capacity, 1),
-            ("A", 2): (19, 0, 1),
-            (0, 1): (2, 6 / capacity, 1),
-            (0, 2): (10, 0, 1),
-            (0, "B"): (19, 0, 1),
-            (1, 2): (1, 0, 1),
-            (1, 3): (10, 0, 1),
-            (2, 3): (2, 6 / capacity, 1),
-            (2, "B"): (2, 6 / capacity, 1),
+            ("A", 0): (2, 6, capacity, 1),
+            ("A", 2): (19, 0, 1, 1),
+            (0, 1): (2, 6, capacity, 1),
+            (0, 2): (10, 0, 1, 1),
+            (0, "B"): (19, 0, 1, 1),
+            (1, 2): (1, 0, 1, 1),
+            (1, 3): (10, 0, 1, 1),
+            (2, 3): (2, 6, capacity, 1),
+            (2, "B"): (2, 6, capacity, 1),
         },
         "latency_params",
     )
@@ -171,37 +157,62 @@ class ListLatencyGenerator(LatencyGenerator):
 
 class UniformLatencyGenerator(LatencyGenerator):
     def __init__(
-        self, a_min, a_max, b_min, b_max, c_min=1, c_max=1, *, integer=False, seed=42
+        self,
+        a_min,
+        a_max,
+        b_min,
+        b_max,
+        c_min=1,
+        c_max=1,
+        d_min=1,
+        d_max=1,
+        *,
+        integer=False,
+        seed=42
     ):
         super().__init__(seed=seed)
-        self.a_min, self.a_max, self.b_min, self.b_max, self.c_min, self.c_max = (
-            a_min,
-            a_max,
-            b_min,
-            b_max,
-            c_min,
-            c_max,
-        )
+        (
+            self.a_min,
+            self.a_max,
+            self.b_min,
+            self.b_max,
+            self.c_min,
+            self.c_max,
+            self.d_min,
+            self.d_max,
+        ) = (a_min, a_max, b_min, b_max, c_min, c_max, d_min, d_max)
         self.integer = integer
 
     def __call__(self):
         if self.integer:
             return tuple(
                 self.rng.randint(
-                    low=[self.a_min, self.b_min, self.c_min],
-                    high=[self.a_max + 1, self.b_max + 1, self.c_max + 1],
+                    low=[self.a_min, self.b_min, self.c_min, self.d_min],
+                    high=[
+                        self.a_max + 1,
+                        self.b_max + 1,
+                        self.c_max + 1,
+                        self.d_max + 1,
+                    ],
                 )
             )
         else:
             return tuple(
                 self.rng.uniform(
-                    low=[self.a_min, self.b_min, self.c_min],
-                    high=[self.a_max, self.b_max, self.c_max],
+                    low=[self.a_min, self.b_min, self.c_min, self.d_min],
+                    high=[self.a_max, self.b_max, self.c_max, self.d_max],
                 )
             )
 
 
 class OneXLatencyGenerator(LatencyGenerator):
+    """Selects randomly one of two latency functions:
+    - l(n) = 1 + n / c
+    - l(n) = 2
+    Using these values, it is always beneficial to choose a variable-latency edge over
+    a constant-latency edge (as in the original Braess Paradox).
+    """
+
     def __init__(self, *, q=0.5, capacity=100, seed=42):
         super().__init__(seed=seed)
         self.q = q
@@ -209,7 +220,7 @@ class OneXLatencyGenerator(LatencyGenerator):
 
     def __call__(self):
         return random.choices(
-            [(1 / (self.capacity + 1), 1 / (self.capacity + 1), 1), (1, 0, 1)],
+            [(1, 1, self.capacity, 1), (2, 0, 1, 1)],
             weights=[self.q, 1.0 - self.q],
         )[0]
 
