@@ -26,7 +26,8 @@ def build_network(network):
         {
             (v, w): lambda u, a=attr["latency_params"][0], b=attr["latency_params"][
                 1
-            ], c=attr["latency_params"][2]: a + b * u ** c
+            ], c=attr["latency_params"][2]: a
+            + b * u**c
             for v, w, attr in network.edges(data=True)
         },
         "latency_fn",
@@ -123,7 +124,9 @@ def create_double_braess_network(capacity=100):
     return build_network(network)
 
 
-def create_cars(network, cars_per_edge: int = 3, goal_distribution=None, seed: int = 42):
+def create_cars(
+    network, cars_per_edge: int = 3, goal_distribution=None, seed: int = 42
+):
     if goal_distribution is None:
         goal_distribution = {1.0: (0, 3)}
 
@@ -133,23 +136,33 @@ def create_cars(network, cars_per_edge: int = 3, goal_distribution=None, seed: i
         for car in range(cars_per_edge):
             # Draw source and target
             s_t = list(goal_distribution.values())[
-                rng.choice(len(goal_distribution.values()), p=list(goal_distribution.keys()))]
+                rng.choice(
+                    len(goal_distribution.values()), p=list(goal_distribution.keys())
+                )
+            ]
             # Set cars on the edge evenly spaces
-            progress = (1 / attr['latency_fn'](cars_per_edge)) * car
+            progress = (1 / attr["latency_fn"](cars_per_edge)) * car
             # Add to the list of cars
-            created_cars[len(created_cars) + car] = Car(len(created_cars) + car, s_t[0], s_t[1],
-                                                        1 / attr['latency_fn'](cars_per_edge),
-                                                        position=((v, w), progress if progress < 1.0 else 1.0))
+            created_cars[len(created_cars) + car] = Car(
+                len(created_cars) + car,
+                s_t[0],
+                s_t[1],
+                1 / attr["latency_fn"](cars_per_edge),
+                position=((v, w), progress if progress < 1.0 else 1.0),
+            )
 
     return created_cars
 
 
 class LatencyGenerator:
-    pass
+    def __init__(self, *, seed=42) -> None:
+        self.rng = np.random.RandomState(seed)
+        random.seed(seed)
 
 
 class ListLatencyGenerator(LatencyGenerator):
-    def __init__(self, possible_params):
+    def __init__(self, possible_params, *, seed=42):
+        super().__init__(seed=seed)
         self.possible_params = possible_params
 
     def __call__(self):
@@ -157,12 +170,48 @@ class ListLatencyGenerator(LatencyGenerator):
 
 
 class UniformLatencyGenerator(LatencyGenerator):
-    def __init__(self, a_min, a_max, b_min, b_max, c_min=1, c_max=1):
-        self.a_min, self.a_max, self.b_min, self.b_max, self.c_min, self.c_max = a_min, a_max, b_min, b_max, c_min, c_max
+    def __init__(
+        self, a_min, a_max, b_min, b_max, c_min=1, c_max=1, *, integer=False, seed=42
+    ):
+        super().__init__(seed=seed)
+        self.a_min, self.a_max, self.b_min, self.b_max, self.c_min, self.c_max = (
+            a_min,
+            a_max,
+            b_min,
+            b_max,
+            c_min,
+            c_max,
+        )
+        self.integer = integer
 
     def __call__(self):
-        return tuple(np.random.uniform(low=[self.a_min, self.b_min, self.c_min],
-                                       high=[self.a_max, self.b_max, self.c_max]))
+        if self.integer:
+            return tuple(
+                self.rng.randint(
+                    low=[self.a_min, self.b_min, self.c_min],
+                    high=[self.a_max + 1, self.b_max + 1, self.c_max + 1],
+                )
+            )
+        else:
+            return tuple(
+                self.rng.uniform(
+                    low=[self.a_min, self.b_min, self.c_min],
+                    high=[self.a_max, self.b_max, self.c_max],
+                )
+            )
+
+
+class OneXLatencyGenerator(LatencyGenerator):
+    def __init__(self, *, q=0.5, capacity=100, seed=42):
+        super().__init__(seed=seed)
+        self.q = q
+        self.capacity = capacity
+
+    def __call__(self):
+        return random.choices(
+            [(1 / self.capacity, 1 / self.capacity, 1), (1, 0, 1)],
+            weights=[self.q, 1.0 - self.q],
+        )[0]
 
 
 def create_random_grid_network(number_of_rows, number_of_columns, latency_generator):
@@ -180,10 +229,25 @@ def create_random_grid_network(number_of_rows, number_of_columns, latency_genera
     )
     nx.set_edge_attributes(
         network,
-        {
-            edge: latency_generator()
-            for edge in network.edges
-        },
+        {edge: latency_generator() for edge in network.edges},
+        "latency_params",
+    )
+
+    return build_network(network)
+
+
+def create_random_gnp_graph(number_of_nodes, p, latency_generator, *, seed=42):
+    network = nx.gnp_random_graph(number_of_nodes, p, seed=seed, directed=True)
+
+    nx.set_node_attributes(
+        network,
+        nx.circular_layout(network),
+        "position",
+    )
+
+    nx.set_edge_attributes(
+        network,
+        {edge: latency_generator() for edge in network.edges},
         "latency_params",
     )
 
