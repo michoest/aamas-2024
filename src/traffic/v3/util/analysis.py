@@ -10,17 +10,17 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 
-def plot_social_welfare(step_stats):
-    (-step_stats["travel_time"]).mean(axis=1).plot(title="Social welfare")
-    plt.legend(["Social Welfare"])
+def plot_social_welfare(step_stats, *, ax=plt):
+    (-step_stats["travel_time"]).mean(axis=1).plot(ax=ax, title="Social welfare")
+    ax.legend(["Social Welfare"])
 
 
-def plot_travel_time_per_route(car_stats):
-    car_stats.groupby(["step", "route"])["travel_time"].mean().unstack().plot(title="Travel time per route")
-    plt.legend()
+def plot_travel_time_per_route(car_stats, *, ax=plt):
+    car_stats.groupby(["step", "route"])["travel_time"].mean().unstack().plot(ax=ax, title="Travel time per route")
+    ax.legend()
 
 
-def plot_cars_per_edge(car_stats):
+def plot_cars_per_edge(car_stats, *, ax=plt):
     pd.DataFrame(
         list(
             car_stats.groupby("step")["route"].aggregate(
@@ -29,27 +29,27 @@ def plot_cars_per_edge(car_stats):
                 )
             )
         )
-    ).fillna(0).plot(title="Number of cars per edge")
-    plt.legend()
+    ).fillna(0).plot(ax=ax, title="Number of cars per edge")
+    ax.legend()
 
 
-def plot_latency_per_edge(step_stats):
-    step_stats['latency'].plot()
+def plot_latency_per_edge(step_stats, *, ax=plt):
+    step_stats['latency'].plot(ax=ax)
 
 
-def plot_cars_per_route(car_stats):
+def plot_cars_per_route(car_stats, *, ax=plt):
     car_stats.groupby(["step", "route"]).size().unstack().fillna(0).plot(
-        title="Number of cars per route"
+        ax=ax, title="Number of cars per route"
     )
-    plt.legend()
+    ax.legend()
 
 
-def plot_toll_per_edge(step_stats):
-    step_stats['toll'].plot(title='Toll per edge')
-    plt.legend()
+def plot_toll_per_edge(step_stats, *, ax=plt):
+    step_stats['toll'].plot(ax=ax, title='Toll per edge')
+    ax.legend()
 
 
-def draw_edge_utilization(model, car_stats, show_std=False):
+def draw_edge_utilization(model, car_stats, show_std=False, ax=plt):
     edge_utilization = (
         (
             pd.DataFrame(
@@ -102,9 +102,10 @@ def draw_edge_utilization(model, car_stats, show_std=False):
             edge: f"{edge_utilization[edge]:.2f}" for edge in edge_utilization
         }
 
-    plt.title("Mean utilization of edges")
+    ax.title("Mean utilization of edges")
     nx.draw(
         model.network,
+        ax=ax,
         pos=nx.get_node_attributes(model.network, "position"),
         edgelist=edge_utilization.keys(),
         edge_color=edge_utilization.values(),
@@ -137,15 +138,17 @@ def get_latency_label(a, b, c):
     return label
 
 
-def draw_latency_params(model):
-    plt.title("Parameters for latency function l(n) = a + b * n ** c")
+def draw_latency_params(model, ax=plt):
+    ax.title("Parameters for latency function l(n) = a + b * n ** c")
     nx.draw(
         model.network,
+        ax=ax,
         pos=nx.get_node_attributes(model.network, "position"),
         connectionstyle="arc3,rad=0.2",
     )
     nx.draw_networkx_edge_labels(
         model.network,
+        ax=ax,
         pos=nx.get_node_attributes(model.network, "position"),
         edge_labels={
             (
@@ -157,23 +160,25 @@ def draw_latency_params(model):
     )
 
 
-def plot_latency_increase_per_edge(model, step_stats):
+def plot_latency_increase_per_edge(model, step_stats, ax=plt):
     free_flow_latencies = {
         (v, w): attr["latency_fn"](0) for v, w, attr in model.network.edges(data=True)
     }
     mean_latencies = step_stats["latency"].mean().to_dict()
 
+    # Note that free flow latencies are always > 0 in the BPR paradigm
     latency_increase = {
-        edge: (mean_latencies[edge] / (free_flow_latencies[edge] + 0.0001)) - 1.0
+        edge: (mean_latencies[edge] / free_flow_latencies[edge]) - 1.0
         for edge in model.network.edges
         if mean_latencies[edge] > free_flow_latencies[edge]
     }
 
     edge_labels = {edge: f"{increase:.1%}" for edge, increase in latency_increase.items()}
 
-    plt.title("Latency increase per edge")
+    ax.title("Latency increase per edge")
     nx.draw(
         model.network,
+        ax=ax,
         pos=nx.get_node_attributes(model.network, "position"),
         edgelist=latency_increase.keys(),
         edge_color=latency_increase.values(),
@@ -185,7 +190,16 @@ def plot_latency_increase_per_edge(model, step_stats):
     )
     nx.draw_networkx_edge_labels(
         model.network,
+        ax=ax,
         pos=nx.get_node_attributes(model.network, "position"),
         edge_labels=edge_labels,
         font_size=8,
     )
+
+
+def plot_summary(model, step_stats, car_stats):
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
+
+    plot_social_welfare(step_stats, ax=ax1)
+    plot_cars_per_route(car_stats, ax=ax2)
+    draw_edge_utilization(model, car_stats, ax=ax3)
