@@ -2,6 +2,7 @@
 # single-step simulations.
 
 from collections import Counter
+import math
 
 import pandas as pd
 import networkx as nx
@@ -121,6 +122,21 @@ def draw_edge_utilization(model, car_stats, show_std=False):
     )
 
 
+def get_latency_label(a, b, c):
+    label = 'l(n) = ' + ('0' if a == 0 and b == 0 else '')
+    label += (f'{a:.0f}' if math.floor(a) == a else f'{a:.2f}') if a != 0 else ''
+
+    if b == 0:
+        return label
+
+    label += (' + ' if b > 0 else ' - ') if a != 0 else ''
+    label += (f'{b:.0f}' if math.floor(a) == a else f'{b:.2f}') if b != 1 else ''
+    label += 'n'
+    label += (f'^{c:.0f}' if math.floor(a) == a else f'^{c:.2f}') if c != 1 else ''
+
+    return label
+
+
 def draw_latency_params(model):
     plt.title("Parameters for latency function l(n) = a + b * n ** c")
     nx.draw(
@@ -135,9 +151,8 @@ def draw_latency_params(model):
             (
                 v,
                 w,
-            ): f'{model.network.edges[(v, w)]["latency_params"]}\n{model.network.edges[(w, v)]["latency_params"]}'
+            ): get_latency_label(*model.network.edges[(v, w)]["latency_params"])
             for v, w in model.network.edges
-            if v < w
         },
     )
 
