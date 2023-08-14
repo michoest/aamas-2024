@@ -1,5 +1,7 @@
 import random
 from collections import Counter
+import json
+import jsonpickle
 
 import networkx as nx
 import numpy as np
@@ -39,6 +41,7 @@ class Car:
         self.value_of_time = value_of_time
         self.value_of_money = value_of_money
         self.verbose = verbose
+        self.toll = 0.0
 
     def __repr__(self) -> str:
         (v, w), p = self.position
@@ -49,7 +52,7 @@ class Car:
         if current_node == self.target or not nx.has_path(
             network, current_node, self.target
         ):
-            return current_node
+            return [current_node, current_node]
         else:
             # Define edge weights according to anticipation_strategy
             if self.anticipation_strategy == "route":
@@ -63,7 +66,7 @@ class Car:
                 # tolls)
                 latencies = {
                     (v, w): attr["anticipated_latency"] * self.value_of_time
-                    + attr["toll"] * self.value_of_money
+                    + attr["anticipated_toll"] * self.value_of_money
                     for v, w, attr in network.edges(data=True)
                 }
             elif self.anticipation_strategy == "edge":
@@ -80,12 +83,12 @@ class Car:
                 # next edge being anticipated
                 latencies = {
                     (v, w): (
-                        attr["anticipated_latency"]
+                        attr["anticipated_latency"] * self.value_of_time
+                        + attr["anticipated_toll"] * self.value_of_money
                         if v == current_node
-                        else attr["latency"]
+                        else attr["latency"] * self.value_of_time
+                        + attr["toll"] * self.value_of_money
                     )
-                    * self.value_of_time
-                    + attr["toll"] * self.value_of_money
                     for v, w, attr in network.edges(data=True)
                 }
             else:
@@ -102,7 +105,10 @@ class Car:
                 )
             )
 
-            self.speed = 1 / (network.edges[chosen_route[:2]]["anticipated_latency"])
+            chosen_edge = chosen_route[:2]
+
+            self.speed = 1 / (network.edges[chosen_edge]["anticipated_latency"])
+            self.toll += network.edges[chosen_edge]["anticipated_toll"]
 
             if self.verbose:
                 print(f"Latencies for routing decision: {latencies}.")
@@ -117,20 +123,38 @@ class Car:
         self.position = (source, source), 1.0
         self.speed = 0
 
+        self.toll = 0.0
+
+    def to_json(self):
+        return {
+            "id": self.id,
+            "source": self.source,
+            "target": self.target,
+            "speed": self.speed,
+            "created_at_step": self.created_at_step,
+            "position": self.position,
+            "anticipation_strategy": self.anticipation_strategy,
+            "value_of_time": self.value_of_time,
+            "value_of_money": self.value_of_money,
+            "toll": self.toll,
+            "verbose": self.verbose,
+        }
+
 
 class TrafficModel:
-    def __init__(self, network, cars, *, beta=0.5, R=0.1, verbose=False) -> None:
+    def __init__(self, network, cars, *, tolls=False, beta=0.5, R=0.1, verbose=False) -> None:
         self.network = network
         self.cars = cars
-        self.routes = {car_id: [] for car_id in self.cars}
+        self.tolls = tolls
         self.beta = beta
         self.R = R
         self.verbose = verbose
 
+        self._type = "undefined"
+        self.routes = {car_id: [] for car_id in self.cars}
         self.step_statistics = []
         self.car_statistics = []
         self.current_step = 0
-        self._type = "undefined"
 
     @property
     def allowed_network(self):
@@ -164,22 +188,23 @@ class TrafficModel:
             "latency_fn"
         ](self.network.edges[edge]["flow"] + 1)
 
-        # Update toll to delta-tolling algorithm
-        new_toll = self.beta * (
-            self.network.edges[edge]["latency"]
-            - self.network.edges[edge]["latency_fn"](0)
-        )
-        self.network.edges[edge]["toll"] = (
-            self.R * new_toll + (1 - self.R) * self.network.edges[edge]["toll"]
-        )
-        new_anticipated_toll = self.beta * (
-            self.network.edges[edge]["anticipated_latency"]
-            - self.network.edges[edge]["latency_fn"](0)
-        )
-        self.network.edges[edge]["anticipated_toll"] = (
-            self.R * new_anticipated_toll
-            + (1 - self.R) * self.network.edges[edge]["anticipated_toll"]
-        )
+        # Update toll according to delta-tolling algorithm
+        if self.tolls:
+            new_toll = self.beta * (
+                self.network.edges[edge]["latency"]
+                - self.network.edges[edge]["latency_fn"](0)
+            )
+            self.network.edges[edge]["toll"] = (
+                self.R * new_toll + (1 - self.R) * self.network.edges[edge]["toll"]
+            )
+            new_anticipated_toll = self.beta * (
+                self.network.edges[edge]["anticipated_latency"]
+                - self.network.edges[edge]["latency_fn"](0)
+            )
+            self.network.edges[edge]["anticipated_toll"] = (
+                self.R * new_anticipated_toll
+                + (1 - self.R) * self.network.edges[edge]["anticipated_toll"]
+            )
 
     def update_network_attributes(self):
         # Update latencies
@@ -201,33 +226,34 @@ class TrafficModel:
         )
 
         # Update tolls according to delta-tolling algorithm
-        new_tolls = {
-            (v, w): self.beta * (attr["latency"] - attr["latency_fn"](0))
-            for v, w, attr in self.network.edges(data=True)
-        }
-        nx.set_edge_attributes(
-            self.network,
-            {
-                (v, w): self.R * new_tolls[(v, w)] + (1 - self.R) * attr["toll"]
+        if self.tolls:
+            new_tolls = {
+                (v, w): self.beta * (attr["latency"] - attr["latency_fn"](0))
                 for v, w, attr in self.network.edges(data=True)
-            },
-            "toll",
-        )
-        new_anticipated_tolls = {
-            (v, w): self.beta * (attr["anticipated_latency"] - attr["latency_fn"](0))
-            for v, w, attr in self.network.edges(data=True)
-        }
-        nx.set_edge_attributes(
-            self.network,
-            {
-                (v, w): self.R * new_anticipated_tolls[(v, w)]
-                + (1 - self.R) * attr["anticipated_toll"]
+            }
+            nx.set_edge_attributes(
+                self.network,
+                {
+                    (v, w): self.R * new_tolls[(v, w)] + (1 - self.R) * attr["toll"]
+                    for v, w, attr in self.network.edges(data=True)
+                },
+                "toll",
+            )
+            new_anticipated_tolls = {
+                (v, w): self.beta * (attr["anticipated_latency"] - attr["latency_fn"](0))
                 for v, w, attr in self.network.edges(data=True)
-            },
-            "anticipated_toll",
-        )
+            }
+            nx.set_edge_attributes(
+                self.network,
+                {
+                    (v, w): self.R * new_anticipated_tolls[(v, w)]
+                    + (1 - self.R) * attr["anticipated_toll"]
+                    for v, w, attr in self.network.edges(data=True)
+                },
+                "anticipated_toll",
+            )
 
-    def run_sequentially(self, number_of_steps):
+    def run_sequentially(self, number_of_steps, *, show_progress=True):
         assert self._type in [
             "undefined",
             "sequentially",
@@ -238,7 +264,7 @@ class TrafficModel:
             car.id: [car.position[0][0], car.position[0][1]]
             for car in self.cars.values()
         }
-        for step in (range if self.verbose else trange)(number_of_steps):
+        for step in (trange if show_progress else range)(number_of_steps):
             if self.verbose:
                 print(f"Step {step}:")
                 print(
@@ -261,8 +287,8 @@ class TrafficModel:
                 + list(nx.get_edge_attributes(self.network, "toll").values())
             )
 
-            if self.verbose:
-                print(self)
+            # if self.verbose:
+            #     print(self)
 
             # Advance agents
             for car in self.cars.values():
@@ -276,8 +302,8 @@ class TrafficModel:
                     f"Positions after step {step}: {[car.position for car in self.cars.values()]}"
                 )
 
-            if self.verbose:
-                print(self)
+            # if self.verbose:
+            #     print(self)
 
             # Re-spawn cars which have arrived
             for car in self.cars.values():
@@ -292,6 +318,7 @@ class TrafficModel:
                             "target": car.target,
                             "route": tuple(routes_taken[car.id]),
                             "travel_time": step - car.created_at_step,
+                            "toll": car.toll
                         }
                     )
 
@@ -314,19 +341,19 @@ class TrafficModel:
             ):
                 self.routes[car.id] = car.act(self.allowed_network)
 
-                if not isinstance(self.routes[car.id], list):
-                    # Reset if no path to target exists and find path again
-                    self.decrease_flow(car.position[0])
-                    car.reset(car.source, step)
-                    routes_taken[car.id] = [car.source]
-                    self.routes[car.id] = car.act(self.allowed_network)
+                # if not isinstance(self.routes[car.id], list):
+                #     # Reset if no path to target exists and find path again
+                #     self.decrease_flow(car.position[0])
+                #     car.reset(car.source, step)
+                #     routes_taken[car.id] = [car.source]
+                #     self.routes[car.id] = car.act(self.allowed_network)
 
                 car.position = (car.position[0][1], self.routes[car.id][1]), 0.0
                 self.increase_flow(car.position[0])
                 routes_taken[car.id].append(car.position[0][1])
 
-            if self.verbose:
-                print(self)
+            # if self.verbose:
+            #     print(self)
 
         return pd.DataFrame(
             self.step_statistics,
@@ -401,3 +428,28 @@ class TrafficModel:
         print(f'{nx.get_edge_attributes(self.network, "flow")=}')
         print(f'{nx.get_edge_attributes(self.network, "latency")=}')
         print(f'{nx.get_edge_attributes(self.network, "anticipated_latency")=}')
+
+    def dump(self, filename):
+        with open(filename, "w") as f:
+            f.write(jsonpickle.encode(nx.node_link_data(self.network)))
+            f.write("\n")
+            f.write(jsonpickle.encode(self.cars, keys=True))
+
+    @classmethod
+    def load(cls, filename):
+        with open(filename, "r") as f:
+            network = nx.node_link_graph(jsonpickle.decode(f.readline()))
+
+            nx.set_edge_attributes(
+                network,
+                {
+                    (v, w): lambda n, params=attr["latency_params"]: params[0]
+                    + params[1] * (n / params[2]) ** params[3]
+                    for v, w, attr in network.edges(data=True)
+                },
+                "latency_fn",
+            )
+
+            cars = jsonpickle.decode(f.readline(), keys=True)
+
+            return TrafficModel(network, cars)
