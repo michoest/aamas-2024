@@ -32,6 +32,12 @@ def update_latency_functions(network):
 
 
 def build_network(network):
+    # Add self-loops
+    network.add_edges_from(
+        [(v, v) for v in network.nodes if (v, v) not in network],
+        latency_params=(1, 0, 1, 1),
+    )
+
     # Create latency functions from parameters: l(n) = a + b * (n / c) ** d
     update_latency_functions(network)
 
@@ -117,13 +123,15 @@ def create_cars(network, car_counts):
     # Iterate through (start, goal)-combinations
     for goal_index, ((s, t), count) in enumerate(car_counts.items()):
         # and get their feasible edges and corresponding latencies
-        feasible_edges = [edge for edge in network.edges
-                          if nx.has_path(network, 10, edge[0]) and nx.has_path(network, edge[1], 11)]
-        latencies = [network.edges[edge]['latency_fn'](0) for edge in feasible_edges]
+        feasible_edges = []
+        for path in nx.all_simple_edge_paths(network, s, t):
+            feasible_edges.extend(edge for edge in path if edge not in feasible_edges)
+        latencies = [network.edges[edge]["latency_fn"](0) for edge in feasible_edges]
 
         # Randomly distribute the cars on the edges weighted by the latency
-        edge_cars = np.random.choice(range(len(feasible_edges)), count,
-                                     p=np.array(latencies) / sum(latencies))
+        edge_cars = np.random.choice(
+            range(len(feasible_edges)), count, p=np.array(latencies) / sum(latencies)
+        )
 
         # Collect the counts for each goal in a separate dictionary
         if len(edge_cars) > 0:
@@ -135,14 +143,18 @@ def create_cars(network, car_counts):
         cars_on_edge = 0
         # and distribute them in a random order on the edge
         while np.sum(remaining_cars) != 0:
-            choice_of_goal = np.random.choice(list(range(len(remaining_cars))),
-                                              p=remaining_cars / np.sum(remaining_cars))
+            choice_of_goal = np.random.choice(
+                list(range(len(remaining_cars))),
+                p=remaining_cars / np.sum(remaining_cars),
+            )
             cars_on_edge += 1
-            cars[len(cars)] = Car(len(cars),
-                                  list(car_counts.keys())[choice_of_goal][0],
-                                  list(car_counts.keys())[choice_of_goal][1],
-                                  speed=1 / network.edges[edge]["latency_fn"](cars_on_edge),
-                                  position=(edge, 0.0))
+            cars[len(cars)] = Car(
+                len(cars),
+                list(car_counts.keys())[choice_of_goal][0],
+                list(car_counts.keys())[choice_of_goal][1],
+                speed=1 / network.edges[edge]["latency_fn"](cars_on_edge),
+                position=(edge, 0.0),
+            )
             remaining_cars[choice_of_goal] -= 1
     return cars
 
@@ -232,7 +244,9 @@ class OneXLatencyGenerator(LatencyGenerator):
         )[0]
 
 
-def create_random_grid_network(number_of_rows, number_of_columns, latency_generator):
+def create_random_grid_network(
+    number_of_rows, number_of_columns, *, latency_generator, p=0.5
+):
     network = nx.grid_2d_graph(
         number_of_rows, number_of_columns, create_using=nx.DiGraph
     )
@@ -240,11 +254,22 @@ def create_random_grid_network(number_of_rows, number_of_columns, latency_genera
     nx.set_node_attributes(
         network,
         {
-            (i, j): (j / (number_of_columns - 1), 1 - (i / (number_of_rows - 1)))
+            (i, j): (j / number_of_columns, 1 - (i / number_of_rows))
             for i, j in network.nodes
         },
         "position",
     )
+
+    network.remove_edges_from(
+        [
+            edge
+            for edge, r in zip(
+                network.edges, np.random.uniform(size=len(network.edges))
+            )
+            if r > p
+        ]
+    )
+
     nx.set_edge_attributes(
         network,
         {edge: latency_generator() for edge in network.edges},
