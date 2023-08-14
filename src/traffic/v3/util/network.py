@@ -8,10 +8,6 @@
 # - latency_fn: lambda n: a + b * n ** c
 # - latency: Current latency value (=latency_fn(flow))
 # - toll: Additional cost to use the edge as defined by delta-tolling
-# - total_cost: Sum of latency and toll
-
-import random
-import math
 
 import networkx as nx
 import numpy as np
@@ -24,7 +20,7 @@ def update_latency_functions(network):
         network,
         {
             (v, w): lambda n, params=attr["latency_params"]: params[0]
-                                                             + params[1] * (n / params[2]) ** params[3]
+            + params[1] * (n / params[2]) ** params[3]
             for v, w, attr in network.edges(data=True)
         },
         "latency_fn",
@@ -161,8 +157,7 @@ def create_cars(network, car_counts):
 
 class LatencyGenerator:
     def __init__(self, *, seed=42) -> None:
-        self.rng = np.random.RandomState(seed)
-        random.seed(seed)
+        self.rng = np.random.default_rng(seed)
 
 
 class ListLatencyGenerator(LatencyGenerator):
@@ -171,23 +166,23 @@ class ListLatencyGenerator(LatencyGenerator):
         self.possible_params = possible_params
 
     def __call__(self):
-        return random.choice(self.possible_params)
+        return self.rng.choice(self.possible_params)
 
 
 class UniformLatencyGenerator(LatencyGenerator):
     def __init__(
-            self,
-            a_min,
-            a_max,
-            b_min,
-            b_max,
-            c_min=1,
-            c_max=1,
-            d_min=1,
-            d_max=1,
-            *,
-            integer=False,
-            seed=42
+        self,
+        a_min,
+        a_max,
+        b_min,
+        b_max,
+        c_min=1,
+        c_max=1,
+        d_min=1,
+        d_max=1,
+        *,
+        integer=False,
+        seed=42
     ):
         super().__init__(seed=seed)
         (
@@ -238,15 +233,14 @@ class OneXLatencyGenerator(LatencyGenerator):
         self.capacity = capacity
 
     def __call__(self):
-        return random.choices(
-            [(1, 1, self.capacity, 1), (2, 0, 1, 1)],
-            weights=[self.q, 1.0 - self.q],
-        )[0]
+        return self.rng.choice([(1, 1, self.capacity, 1), (2, 0, 1, 1)], p=[self.q, 1.0 - self.q])
 
 
 def create_random_grid_network(
-    number_of_rows, number_of_columns, *, latency_generator, p=0.5
+    number_of_rows, number_of_columns, *, latency_generator, p=0.5, seed=42
 ):
+    rng = np.random.default_rng(seed)
+
     network = nx.grid_2d_graph(
         number_of_rows, number_of_columns, create_using=nx.DiGraph
     )
@@ -264,7 +258,7 @@ def create_random_grid_network(
         [
             edge
             for edge, r in zip(
-                network.edges, np.random.uniform(size=len(network.edges))
+                network.edges, rng.uniform(size=len(network.edges))
             )
             if r > p
         ]
