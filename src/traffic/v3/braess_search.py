@@ -12,7 +12,6 @@ import pandas as pd
 from src.traffic.v3.environment import TrafficModel
 from src.traffic.v3.util.network import create_cars, create_random_gnp_graph, UniformLatencyGenerator
 
-
 a_max = hp.randint('a_max', 3, 5)
 a_min = hp.randint('a_min', 1, a_max)
 b_max = hp.randint('b_max', 3, 5)
@@ -42,7 +41,7 @@ def single_run(sample, task, edge=None, allowed=True, nodes=40, p=0.1, steps=100
 
     step_statistics, car_statistics = model.run_sequentially(steps)
 
-    return (-car_statistics["travel_time"]).mean(), step_statistics, car_statistics
+    return (-car_statistics["travel_time"]).mean() if 'travel_time' in car_statistics.columns else -np.inf, step_statistics, car_statistics
 
 
 def get_task(n, p):
@@ -56,7 +55,7 @@ def get_task(n, p):
                                       seed=seed)
 
     task = tuple(np.random.choice(network.nodes, 2))
-    while len(nx.shortest_path(network, task[0], task[1])) <= 2:
+    while not nx.has_path(network, task[0], task[1]) or len(nx.shortest_path(network, task[0], task[1])) <= 2:
         task = tuple(np.random.choice(network.nodes, 2))
 
     return task
