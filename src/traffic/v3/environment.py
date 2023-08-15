@@ -307,6 +307,8 @@ class TrafficModel:
                         {
                             "step": step,
                             "car_id": car.id,
+                            "value_of_time": car.value_of_time,
+                            "value_of_money": car.value_of_money,
                             "source": car.source,
                             "target": car.target,
                             "route": tuple(routes_taken[car.id]),
