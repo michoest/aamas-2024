@@ -1,7 +1,5 @@
 import random
 from collections import Counter
-import json
-import jsonpickle
 
 import networkx as nx
 import numpy as np
@@ -25,10 +23,9 @@ class Car:
         verbose=False,
     ) -> None:
         assert anticipation_strategy in [
+            "none",
             "edge",
             "route",
-            "edge_tolls",
-            "route_tolls",
         ], "Unknown anticipation strategy"
 
         self.id = id
@@ -55,31 +52,15 @@ class Car:
             return [current_node, current_node]
         else:
             # Define edge weights according to anticipation_strategy
-            if self.anticipation_strategy == "route":
-                # Find the shortest path based on anticipated latencies
+            if self.anticipation_strategy == "none":
+                # Find the shortest path based on the actual latencies
                 latencies = {
-                    (v, w): attr["anticipated_latency"]
-                    for v, w, attr in network.edges(data=True)
-                }
-            elif self.anticipation_strategy == "route_tolls":
-                # Find the shortest path based on the anticipated total cost (including
-                # tolls)
-                latencies = {
-                    (v, w): attr["anticipated_latency"] * self.value_of_time
-                    + attr["anticipated_toll"] * self.value_of_money
+                    (v, w): attr["latency"] * self.value_of_time
+                    + attr["toll"] * self.value_of_money
                     for v, w, attr in network.edges(data=True)
                 }
             elif self.anticipation_strategy == "edge":
                 # Find the shortest path based on the actual latencies with only the
-                # next edge being anticipated
-                latencies = {
-                    (v, w): attr["anticipated_latency"]
-                    if v == current_node
-                    else attr["latency"]
-                    for v, w, attr in network.edges(data=True)
-                }
-            elif self.anticipation_strategy == "edge_tolls":
-                # Find the shortest path based on the actual total costs with only the
                 # next edge being anticipated
                 latencies = {
                     (v, w): (
@@ -89,6 +70,14 @@ class Car:
                         else attr["latency"] * self.value_of_time
                         + attr["toll"] * self.value_of_money
                     )
+                    for v, w, attr in network.edges(data=True)
+                }
+            elif self.anticipation_strategy == "route":
+                # Find the shortest path based on the anticipated total cost (including
+                # tolls)
+                latencies = {
+                    (v, w): attr["anticipated_latency"] * self.value_of_time
+                    + attr["anticipated_toll"] * self.value_of_money
                     for v, w, attr in network.edges(data=True)
                 }
             else:
@@ -107,6 +96,7 @@ class Car:
 
             chosen_edge = chosen_route[:2]
 
+            # Always use anticipated attributes for speed and toll
             self.speed = 1 / (network.edges[chosen_edge]["anticipated_latency"])
             self.toll += network.edges[chosen_edge]["anticipated_toll"]
 
@@ -142,7 +132,9 @@ class Car:
 
 
 class TrafficModel:
-    def __init__(self, network, cars, *, tolls=False, beta=0.5, R=0.1, verbose=False) -> None:
+    def __init__(
+        self, network, cars, *, tolls=False, beta=0.5, R=0.1, verbose=False
+    ) -> None:
         self.network = network
         self.cars = cars
         self.tolls = tolls
@@ -240,7 +232,8 @@ class TrafficModel:
                 "toll",
             )
             new_anticipated_tolls = {
-                (v, w): self.beta * (attr["anticipated_latency"] - attr["latency_fn"](0))
+                (v, w): self.beta
+                * (attr["anticipated_latency"] - attr["latency_fn"](0))
                 for v, w, attr in self.network.edges(data=True)
             }
             nx.set_edge_attributes(
@@ -318,7 +311,10 @@ class TrafficModel:
                             "target": car.target,
                             "route": tuple(routes_taken[car.id]),
                             "travel_time": step - car.created_at_step,
-                            "toll": car.toll
+                            "toll": car.toll,
+                            "total_cost": (step - car.created_at_step)
+                            * car.value_of_time
+                            + car.toll * car.value_of_money,
                         }
                     )
 
@@ -428,28 +424,3 @@ class TrafficModel:
         print(f'{nx.get_edge_attributes(self.network, "flow")=}')
         print(f'{nx.get_edge_attributes(self.network, "latency")=}')
         print(f'{nx.get_edge_attributes(self.network, "anticipated_latency")=}')
-
-    def dump(self, filename):
-        with open(filename, "w") as f:
-            f.write(jsonpickle.encode(nx.node_link_data(self.network)))
-            f.write("\n")
-            f.write(jsonpickle.encode(self.cars, keys=True))
-
-    @classmethod
-    def load(cls, filename):
-        with open(filename, "r") as f:
-            network = nx.node_link_graph(jsonpickle.decode(f.readline()))
-
-            nx.set_edge_attributes(
-                network,
-                {
-                    (v, w): lambda n, params=attr["latency_params"]: params[0]
-                    + params[1] * (n / params[2]) ** params[3]
-                    for v, w, attr in network.edges(data=True)
-                },
-                "latency_fn",
-            )
-
-            cars = jsonpickle.decode(f.readline(), keys=True)
-
-            return TrafficModel(network, cars)
