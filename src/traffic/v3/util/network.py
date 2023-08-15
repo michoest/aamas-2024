@@ -112,22 +112,21 @@ def create_double_braess_network(capacity=100):
     return build_network(network)
 
 
-def create_cars(network, car_counts):
+def create_cars(network, car_counts, seed=42):
+    rng = np.random.RandomState(seed)
     cars = {}  # Dictionary of final cars
     # Dictionary storing counts of cars on each edge for the different goals
     car_distribution = {edge: [0] * len(car_counts) for edge in network.edges}
     # Iterate through (start, goal)-combinations
     for goal_index, ((s, t), count) in enumerate(car_counts.items()):
         # and get their feasible edges and corresponding latencies
-        feasible_edges = []
-        for path in nx.all_simple_edge_paths(network, s, t):
-            feasible_edges.extend(edge for edge in path if edge not in feasible_edges)
-        latencies = [network.edges[edge]["latency_fn"](0) for edge in feasible_edges]
+        feasible_edges = [edge for edge in network.edges
+                          if nx.has_path(network, s, edge[0]) and nx.has_path(network, edge[1], t)]
+        latencies = [network.edges[edge]['latency_fn'](0) for edge in feasible_edges]
 
         # Randomly distribute the cars on the edges weighted by the latency
-        edge_cars = np.random.choice(
-            range(len(feasible_edges)), count, p=np.array(latencies) / sum(latencies)
-        )
+        edge_cars = rng.choice(range(len(feasible_edges)), count,
+                               p=np.array(latencies) / sum(latencies))
 
         # Collect the counts for each goal in a separate dictionary
         if len(edge_cars) > 0:
@@ -139,18 +138,14 @@ def create_cars(network, car_counts):
         cars_on_edge = 0
         # and distribute them in a random order on the edge
         while np.sum(remaining_cars) != 0:
-            choice_of_goal = np.random.choice(
-                list(range(len(remaining_cars))),
-                p=remaining_cars / np.sum(remaining_cars),
-            )
+            choice_of_goal = rng.choice(list(range(len(remaining_cars))),
+                                        p=remaining_cars / np.sum(remaining_cars))
             cars_on_edge += 1
-            cars[len(cars)] = Car(
-                len(cars),
-                list(car_counts.keys())[choice_of_goal][0],
-                list(car_counts.keys())[choice_of_goal][1],
-                speed=1 / network.edges[edge]["latency_fn"](cars_on_edge),
-                position=(edge, 0.0),
-            )
+            cars[len(cars)] = Car(len(cars),
+                                  list(car_counts.keys())[choice_of_goal][0],
+                                  list(car_counts.keys())[choice_of_goal][1],
+                                  speed=1 / network.edges[edge]["latency_fn"](cars_on_edge),
+                                  position=(edge, 0.0))
             remaining_cars[choice_of_goal] -= 1
     return cars
 
