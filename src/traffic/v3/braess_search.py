@@ -39,6 +39,10 @@ def single_run(sample, task, edge=None, allowed=True, nodes=40, p=0.1, steps=100
     if edge is not None:
         model.set_edge_restriction(edge, allowed=allowed)
 
+        if not nx.has_path(model.network, task):
+            print('Skipping as the task got infeasible!')
+            return -np.inf
+
     step_statistics, car_statistics = model.run_sequentially(steps)
 
     return (-car_statistics["travel_time"]).mean() if 'travel_time' in car_statistics.columns else -np.inf, step_statistics, car_statistics
@@ -89,6 +93,7 @@ def find_braess(search_space, samples=10, steps=1000):
         # Iterate through edges of most used routes and calculate improvement through removal
         for edge in top_unrestricted_edges:
             print(f'Processing edge {edge}')
+
             results = pd.concat([results, pd.DataFrame({
                 **sample,
                 'n': graph_nodes,
