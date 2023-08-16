@@ -109,8 +109,9 @@ class Car:
 
             return chosen_route
 
-    def reset(self, source, step):
+    def reset(self, source, target, step):
         self.source = source
+        self.target = target
         self.created_at_step = step
 
         self.position = (source, source), 1.0
@@ -331,7 +332,7 @@ class TrafficModel:
                             f"Car {car.id} reached its target after {step - car.created_at_step} steps."
                         )
 
-                    car.reset(car.source, step)
+                    car.reset(car.source, car.target, step)
                     routes_taken[car.id] = [car.source]
 
             if self.verbose:
@@ -344,14 +345,6 @@ class TrafficModel:
                 [car for car in self.cars.values() if car.position[1] == 1.0]
             ):
                 self.routes[car.id] = car.act(self.allowed_network)
-
-                # if not isinstance(self.routes[car.id], list):
-                #     # Reset if no path to target exists and find path again
-                #     self.decrease_flow(car.position[0])
-                #     car.reset(car.source, step)
-                #     routes_taken[car.id] = [car.source]
-                #     self.routes[car.id] = car.act(self.allowed_network)
-
                 car.position = (car.position[0][1], self.routes[car.id][1]), 0.0
                 self.increase_flow(car.position[0])
                 routes_taken[car.id].append(car.position[0][1])
@@ -432,3 +425,103 @@ class TrafficModel:
         print(f'{nx.get_edge_attributes(self.network, "flow")=}')
         print(f'{nx.get_edge_attributes(self.network, "latency")=}')
         print(f'{nx.get_edge_attributes(self.network, "anticipated_latency")=}')
+
+    def run_sequentially_with_phases(self, phases, *, show_progress=True):
+        assert self._type in [
+            "undefined",
+            "sequentially",
+        ], "Cannot proceed sequentially from a single step model"
+        self._type = "sequentially"
+
+        routes_taken = {
+            car.id: [car.position[0][0], car.position[0][1]]
+            for car in self.cars.values()
+        }
+
+        cumulated_step = 0
+        for car_counts, number_of_steps in phases:
+            print(f'Running demand {car_counts} for {number_of_steps} steps...')
+            demand = [item for s_t, count in car_counts.items() for item in [s_t] * count]
+            self.rng.shuffle(demand)
+            demand = dict(enumerate(demand))
+
+            for phase_step in range(number_of_steps):
+                # Update flow and latencies
+                flow_counter = Counter(car.position[0] for car in self.cars.values())
+                nx.set_edge_attributes(
+                    self.network,
+                    {edge: flow_counter[edge] for edge in self.network.edges},
+                    "flow",
+                )
+                self.update_network_attributes()
+
+                self.step_statistics.append(
+                    list(self.routes.values())
+                    + list(nx.get_edge_attributes(self.network, "flow").values())
+                    + list(nx.get_edge_attributes(self.network, "latency").values())
+                    + list(nx.get_edge_attributes(self.network, "toll").values())
+                )
+
+                # Advance agents
+                for car in self.cars.values():
+                    car.position = (car.position[0], min(car.position[1] + car.speed, 1.0))
+
+                    if car.position[1] >= 1.0:
+                        self.decrease_flow(car.position[0])
+
+                # Re-spawn cars which have arrived
+                for car in self.cars.values():
+                    if car.position[0][0] == car.target or (
+                        car.position[0][1] == car.target and car.position[1] == 1.0
+                    ):
+                        self.car_statistics.append(
+                            {
+                                "step": cumulated_step,
+                                "car_id": car.id,
+                                "value_of_time": car.value_of_time,
+                                "value_of_money": car.value_of_money,
+                                "source": car.source,
+                                "target": car.target,
+                                "route": tuple(routes_taken[car.id]),
+                                "travel_time": cumulated_step - car.created_at_step,
+                                "toll": car.toll,
+                                "total_cost": (cumulated_step - car.created_at_step)
+                                * car.value_of_time
+                                + car.toll * car.value_of_money,
+                            }
+                        )
+
+                        if self.verbose:
+                            print(
+                                f"Car {car.id} reached its target after {cumulated_step - car.created_at_step} steps."
+                            )
+
+                        car.reset(*demand[car.id], cumulated_step)
+                        routes_taken[car.id] = [car.source]
+
+                if self.verbose:
+                    print(
+                        f"Positions after re-spawning at step {cumulated_step}: {[car.position for car in self.cars.values()]}"
+                    )
+
+                # Let agents make decisions
+                for car in self.rng.permutation(
+                    [car for car in self.cars.values() if car.position[1] == 1.0]
+                ):
+                    self.routes[car.id] = car.act(self.allowed_network)
+
+                    car.position = (car.position[0][1], self.routes[car.id][1]), 0.0
+                    self.increase_flow(car.position[0])
+                    routes_taken[car.id].append(car.position[0][1])
+
+                cumulated_step += 1
+
+        return pd.DataFrame(
+            self.step_statistics,
+            columns=pd.MultiIndex.from_tuples(
+                [("route", car_id) for car_id in self.cars]
+                + [("flow", edge_id) for edge_id in self.network.edges]
+                + [("latency", edge_id) for edge_id in self.network.edges]
+                + [("toll", edge_id) for edge_id in self.network.edges]
+            ),
+        ), pd.DataFrame(self.car_statistics)
