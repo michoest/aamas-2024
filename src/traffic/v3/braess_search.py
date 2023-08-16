@@ -39,7 +39,7 @@ def single_run(sample, task, edge=None, allowed=True, nodes=40, p=0.1, steps=100
     if edge is not None:
         model.set_edge_restriction(edge, allowed=allowed)
 
-        if not nx.has_path(model.network, task):
+        if not nx.has_path(model.allowed_network, task[0], task[1]):
             print('Skipping as the task got infeasible!')
             return -np.inf
 
