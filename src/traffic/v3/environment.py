@@ -86,8 +86,9 @@ class Car:
             else:
                 raise ValueError()
 
-            chosen_route = self.rng.choice(
-                list(
+            # rng.choice cannot handle inhomogeneous shapes, so we need to draw a
+            # random number and return the corresponding list element instead
+            shortest_routes = list(
                     nx.all_shortest_paths(
                         network,
                         current_node,
@@ -95,8 +96,7 @@ class Car:
                         weight=lambda v, w, _: latencies[(v, w)],
                     )
                 )
-            )
-
+            chosen_route = shortest_routes[self.rng.choice(len(shortest_routes))]
             chosen_edge = chosen_route[:2]
 
             # Always use anticipated attributes for speed and toll
