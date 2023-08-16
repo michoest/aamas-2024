@@ -1,4 +1,3 @@
-import random
 from collections import Counter
 
 import networkx as nx
@@ -21,6 +20,7 @@ class Car:
         value_of_time=1,
         value_of_money=1,
         verbose=False,
+        seed=42
     ) -> None:
         assert anticipation_strategy in [
             "none",
@@ -39,6 +39,9 @@ class Car:
         self.value_of_money = value_of_money
         self.verbose = verbose
         self.toll = 0.0
+
+        # Initialize random generator
+        self.rng = np.random.default_rng(seed)
 
     def __repr__(self) -> str:
         (v, w), p = self.position
@@ -83,7 +86,7 @@ class Car:
             else:
                 raise ValueError()
 
-            chosen_route = random.choice(
+            chosen_route = self.rng.choice(
                 list(
                     nx.all_shortest_paths(
                         network,
@@ -133,7 +136,7 @@ class Car:
 
 class TrafficModel:
     def __init__(
-        self, network, cars, *, tolls=False, beta=0.5, R=0.1, verbose=False
+        self, network, cars, *, tolls=False, beta=0.5, R=0.1, verbose=False, seed=42
     ) -> None:
         self.network = network
         self.cars = cars
@@ -147,6 +150,9 @@ class TrafficModel:
         self.step_statistics = []
         self.car_statistics = []
         self.current_step = 0
+
+        # Initialize random generator
+        self.rng = np.random.default_rng(seed)
 
     @property
     def allowed_network(self):
@@ -334,7 +340,7 @@ class TrafficModel:
                 )
 
             # Let agents make decisions
-            for car in np.random.permutation(
+            for car in self.rng.permutation(
                 [car for car in self.cars.values() if car.position[1] == 1.0]
             ):
                 self.routes[car.id] = car.act(self.allowed_network)
@@ -375,7 +381,7 @@ class TrafficModel:
             if self.verbose:
                 print(self)
 
-            for car in np.random.permutation(list(self.cars.values())):
+            for car in self.rng.permutation(list(self.cars.values())):
                 for edge in zip(self.routes[car.id], self.routes[car.id][1:]):
                     self.decrease_flow(edge)
 

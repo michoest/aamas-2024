@@ -113,7 +113,7 @@ def create_double_braess_network(capacity=100):
 
 
 def create_cars(network, car_counts, seed=42):
-    rng = np.random.RandomState(seed)
+    rng = np.random.default_rng(seed)
     cars = {}  # Dictionary of final cars
     # Dictionary storing counts of cars on each edge for the different goals
     car_distribution = {edge: [0] * len(car_counts) for edge in network.edges}
