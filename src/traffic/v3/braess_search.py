@@ -41,7 +41,7 @@ def single_run(sample, task, edge=None, allowed=True, nodes=40, p=0.1, steps=100
 
         if not nx.has_path(model.allowed_network, task[0], task[1]):
             print('Skipping as the task got infeasible!')
-            return -np.inf
+            return -np.inf, None, None
 
     step_statistics, car_statistics = model.run_sequentially(steps)
 
