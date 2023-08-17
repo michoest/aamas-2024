@@ -43,9 +43,13 @@ def single_run(sample, task, edge=None, allowed=True, nodes=40, p=0.1, steps=100
             print('Skipping as the task got infeasible!')
             return -np.inf, None, None
 
+        model.cars = create_cars(model.allowed_network, car_counts={task: sample['cars']},
+                                 seed=seed)
+
     step_statistics, car_statistics = model.run_sequentially(steps)
 
-    return (-car_statistics["travel_time"]).mean() if 'travel_time' in car_statistics.columns else -np.inf, step_statistics, car_statistics
+    return (-car_statistics["travel_time"][-int(
+        len(car_statistics) / 2):]).mean() if 'travel_time' in car_statistics.columns else -np.inf, step_statistics, car_statistics
 
 
 def get_task(n, p):
@@ -79,14 +83,17 @@ def find_braess(search_space, samples=10, steps=1000):
         sample = hyperopt.pyll.stochastic.sample(search_space)
         print(f'Sample: {sample} (Iteration {iteration})')
 
+        # Unrestricted evaluation
+        unrestricted_performance, step_stats, car_stats = single_run(sample,
+                                                                     task=task,
+                                                                     steps=steps,
+                                                                     nodes=graph_nodes,
+                                                                     p=graph_p)
+
         # Five most used routes
         top_unrestricted_edges = set(
             [(route[index], route[index + 1]) for route in list(
-                single_run(sample,
-                           task=task,
-                           steps=steps,
-                           nodes=graph_nodes,
-                           p=graph_p)[2].groupby('route').count().sort_values(
+                car_stats.groupby('route').count().sort_values(
                     ascending=False, by='step'
                 ).head().index) for index, node in enumerate(route) if index < len(route) - 1])
 
@@ -103,7 +110,7 @@ def find_braess(search_space, samples=10, steps=1000):
                 'seed': [seed],
                 'mean_travel_time': [
                     single_run(sample, task, edge, False, graph_nodes, graph_p, steps)[0]
-                    - single_run(sample, task, edge, True, graph_nodes, graph_p, steps)[0]]
+                    - unrestricted_performance]
             })])
 
     return results
