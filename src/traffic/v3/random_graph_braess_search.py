@@ -1,6 +1,5 @@
 import argparse
 import math
-import os
 import time
 
 import networkx as nx
@@ -11,6 +10,7 @@ import pandas as pd
 
 from src.traffic.v3.environment import TrafficModel
 from src.traffic.v3.util.network import create_cars, create_random_gnp_graph, UniformLatencyGenerator
+from src.traffic.v3.util.utils import save_or_extend_dataframe
 
 a_max = hp.randint('a_max', 3, 5)
 a_min = hp.randint('a_min', 1, a_max)
@@ -114,14 +114,6 @@ def find_braess(search_space, samples=10, steps=1000):
             })])
 
     return results
-
-
-def save_or_extend_dataframe(dataframe, path: str):
-    if os.path.exists(path):
-        results = [pd.read_pickle(path), dataframe]
-        pd.concat(results).reset_index(drop=True).to_pickle(path)
-    else:
-        dataframe.to_pickle(path)
 
 
 if __name__ == "__main__":

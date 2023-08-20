@@ -11,6 +11,7 @@
 
 import networkx as nx
 import numpy as np
+import pandas as pd
 
 from environment import Car
 
@@ -112,6 +113,32 @@ def create_double_braess_network(capacity=100):
     return build_network(network)
 
 
+def create_sioux_falls_network(network_path: str, costs_path: str):
+    net = pd.read_csv(network_path, skiprows=8, sep='\t')
+    trimmed = [s.strip().lower() for s in net.columns]
+    net.columns = trimmed
+    net.drop(['~', ';'], axis=1, inplace=True)
+
+    n = nx.DiGraph([(edge['init_node'], edge['term_node']) for index, edge in net.iterrows()])
+    c = pd.read_csv(costs_path,
+                    sep='\s+',
+                    names=['free_flow', 'b', 'capacity', 'power'],
+                    index_col=False)
+
+    nx.set_edge_attributes(
+        n,
+        {
+            (int(net[net.index == i]['init_node'].iloc[0]),
+             int(net[net.index == i]['term_node'].iloc[0])): (edge['free_flow'], edge['b'] * edge['b'],
+                                                              edge['capacity'],
+                                                              edge['power']) for i, edge in c.iterrows()
+        },
+        "latency_params",
+    )
+
+    return build_network(n)
+
+
 def create_cars(network, car_counts, seed=42):
     rng = np.random.default_rng(seed)
     cars = {}  # Dictionary of final cars
@@ -148,6 +175,12 @@ def create_cars(network, car_counts, seed=42):
                                   position=(edge, 0.0))
             remaining_cars[choice_of_goal] -= 1
     return cars
+
+
+def create_sioux_falls_cars(path, network):
+    trips = pd.read_csv(path, sep=' ', names=['s', 't', 'cars'], index_col=False)
+    routes = {(trip['s'], trip['t']): trip['cars'] for _, trip in trips.iterrows()}
+    return create_cars(network, routes)
 
 
 class LatencyGenerator:
