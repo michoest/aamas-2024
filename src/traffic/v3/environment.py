@@ -119,21 +119,6 @@ class Car:
 
         self.toll = 0.0
 
-    def to_json(self):
-        return {
-            "id": self.id,
-            "source": self.source,
-            "target": self.target,
-            "speed": self.speed,
-            "created_at_step": self.created_at_step,
-            "position": self.position,
-            "anticipation_strategy": self.anticipation_strategy,
-            "value_of_time": self.value_of_time,
-            "value_of_money": self.value_of_money,
-            "toll": self.toll,
-            "verbose": self.verbose,
-        }
-
 
 class TrafficModel:
     def __init__(

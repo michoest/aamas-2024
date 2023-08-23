@@ -139,6 +139,120 @@ def create_sioux_falls_network(network_path: str, costs_path: str):
     return build_network(n)
 
 
+def create_generalized_braess_network(k, *, capacity=1, degree=1):
+    network = nx.DiGraph(
+        [("s", f"v{i}") for i in range(1, k + 1)]
+        + [(f"v{i}", f"w{i}") for i in range(1, k + 1)]
+        + [(f"w{i}", "t") for i in range(1, k + 1)]
+        + [(f"v{i}", f"w{i-1}") for i in range(2, k + 1)]
+        + [("s", f"w{k}"), ("v1", "t")]
+    )
+
+    nx.set_node_attributes(
+        network,
+        {
+            "s": (0, 0.5),
+            "v1": (0.5, 0),
+            **{f"v{i}": (0.33, (i - 1) / k) for i in range(2, k + 1)},
+            **{f"w{i}": (0.66, i / k) for i in range(1, k)},
+            f"w{k}": (0.5, 1),
+            "t": (1, 0.5),
+        },
+        "position",
+    )
+
+    # Following Roughgarden
+    # nx.set_edge_attributes(
+    #     network,
+    #     {
+    #         **{("s", f"v{i}"): (0, k - i + 1, capacity, 1) for i in range(1, k + 1)},  # Type C
+    #         **{(f"v{i}", f"w{i}"): (0.01, 0, 1, 1) for i in range(1, k + 1)},  # Type A
+    #         **{(f"w{i}", "t"): (0, i, capacity, 1) for i in range(1, k + 1)},  # Type C
+    #         **{(f"v{i}", f"w{i-1}"): (1, 0, 1, 1) for i in range(2, k + 1)},  # Type B
+    #         **{("s", f"w{k}"): (1, 0, 1, 1), ("v1", "t"): (1, 0, 1, 1)},  # Type B
+    #     },
+    #     "latency_params",
+    # )
+
+    # Own adaptation
+    # nx.set_edge_attributes(
+    #     network,
+    #     {
+    #         **{("s", f"v{i}"): (0, 10*(k - i + 1), capacity, degree) for i in range(1, k + 1)},  # Type C
+    #         **{(f"v{i}", f"w{i}"): (1, 0, 1, degree) for i in range(1, k + 1)},  # Type A
+    #         **{(f"w{i}", "t"): (0, 10*i, capacity, degree) for i in range(1, k + 1)},  # Type C
+    #         **{(f"v{i}", f"w{i-1}"): (5, 0, 1, degree) for i in range(2, k + 1)},  # Type B
+    #         **{("s", f"w{k}"): (5, 0, 1, degree), ("v1", "t"): (5, 0, 1, degree)},  # Type B
+    #     },
+    #     "latency_params",
+    # )
+
+    # nx.set_edge_attributes(
+    #     network,
+    #     {
+    #         **{("s", f"v{i}"): (0, k - i + 1, capacity, degree) for i in range(1, k + 1)},  # Type C
+    #         **{(f"v{i}", f"w{i}"): (0.01, 0, 1, degree) for i in range(1, k + 1)},  # Type A
+    #         **{(f"w{i}", "t"): (0, i, capacity, degree) for i in range(1, k + 1)},  # Type C
+    #         **{(f"v{i}", f"w{i-1}"): (1, 0, 1, degree) for i in range(2, k + 1)},  # Type B
+    #         **{("s", f"w{k}"): (1, 0, 1, degree), ("v1", "t"): (1, 0, 1, degree)},  # Type B
+    #     },
+    #     "latency_params",
+    # )
+
+    return build_network(network)
+
+
+def create_multicommodity_braess_network(p, *, capacity=1, degree=1):
+    assert p % 2, "p must be odd!"
+
+    network = nx.DiGraph(
+        [("s2", "w0")]
+        + [(f"w{i}", f"w{i + 1}") for i in range(0, p)]
+        + [(f"w{p}", "t2")]
+        + [("s1", "a"), ("a", "w1"), ("w1", "v1")]
+        + [(f"v{i}", f"v{i + 1}") for i in range(1, p)]
+        + [(f"v{p}", "t1")]
+        + [("a", f"w{i}") for i in range(2, p, 2)]
+        + [(f"v{i}", f"w{i}") for i in range(2, p, 2)]
+        + [("s2", f"v{i}") for i in range(1, p - 1, 2)]
+        + [(f"w{i}", f"v{i}") for i in range(1, p + 1, 2)]
+        + [("s1", "w0")]
+    )
+
+    nx.set_node_attributes(
+        network,
+        {
+            "s1": (0, 2 / (p + 3)),
+            "a": (1 / (p + 4), 2 / (p + 3)),
+            **{f"v{i}": ((i + 3) / (p + 4), 2 / (p + 3)) for i in range(1, p + 1)},
+            "t1": (1, 2 / (p + 3)),
+            "s2": (2 / (p + 4), 0),
+            **{f"w{i}": (2 / (p + 4), (i + 1) / (p + 3)) for i in range(0, p + 1)},
+            "t2": (2 / (p + 4), 1),
+        },
+        "position",
+    )
+
+    nx.set_edge_attributes(network, (0.01, 0, 1, 1), "latency_params")
+
+    nx.set_edge_attributes(
+        network,
+        {
+            ("w0", "w1"): (0, 1, capacity, degree),
+            **{
+                (f"v{i}", f"v{i+1}")
+                if i % 2
+                else (f"w{i}", f"w{i+1}"): (0, i, capacity, degree)
+                for i in range(1, p)
+            },
+            ("s1", "a"): (1, 0, 1, 1),
+        },
+        "latency_params",
+    )
+
+    return build_network(network)
+
+
 def create_cars(network, car_counts, seed=42):
     rng = np.random.default_rng(seed)
     cars = {}  # Dictionary of final cars
@@ -147,13 +261,17 @@ def create_cars(network, car_counts, seed=42):
     # Iterate through (start, goal)-combinations
     for goal_index, ((s, t), count) in enumerate(car_counts.items()):
         # and get their feasible edges and corresponding latencies
-        feasible_edges = [edge for edge in network.edges
-                          if nx.has_path(network, s, edge[0]) and nx.has_path(network, edge[1], t)]
-        latencies = [network.edges[edge]['latency_fn'](0) for edge in feasible_edges]
+        feasible_edges = [
+            edge
+            for edge in network.edges
+            if nx.has_path(network, s, edge[0]) and nx.has_path(network, edge[1], t)
+        ]
+        latencies = [network.edges[edge]["latency_fn"](0) for edge in feasible_edges]
 
         # Randomly distribute the cars on the edges weighted by the latency
-        edge_cars = rng.choice(range(len(feasible_edges)), count,
-                               p=np.array(latencies) / sum(latencies))
+        edge_cars = rng.choice(
+            range(len(feasible_edges)), count, p=np.array(latencies) / sum(latencies)
+        )
 
         # Collect the counts for each goal in a separate dictionary
         if len(edge_cars) > 0:
@@ -165,14 +283,18 @@ def create_cars(network, car_counts, seed=42):
         cars_on_edge = 0
         # and distribute them in a random order on the edge
         while np.sum(remaining_cars) != 0:
-            choice_of_goal = rng.choice(list(range(len(remaining_cars))),
-                                        p=remaining_cars / np.sum(remaining_cars))
+            choice_of_goal = rng.choice(
+                list(range(len(remaining_cars))),
+                p=remaining_cars / np.sum(remaining_cars),
+            )
             cars_on_edge += 1
-            cars[len(cars)] = Car(len(cars),
-                                  list(car_counts.keys())[choice_of_goal][0],
-                                  list(car_counts.keys())[choice_of_goal][1],
-                                  speed=1 / network.edges[edge]["latency_fn"](cars_on_edge),
-                                  position=(edge, 0.0))
+            cars[len(cars)] = Car(
+                len(cars),
+                list(car_counts.keys())[choice_of_goal][0],
+                list(car_counts.keys())[choice_of_goal][1],
+                speed=1 / network.edges[edge]["latency_fn"](cars_on_edge),
+                position=(edge, 0.0),
+            )
             remaining_cars[choice_of_goal] -= 1
     return cars
 
@@ -210,7 +332,7 @@ class UniformLatencyGenerator(LatencyGenerator):
         d_max=1,
         *,
         integer=False,
-        seed=42
+        seed=42,
     ):
         super().__init__(seed=seed)
         (
@@ -261,7 +383,9 @@ class OneXLatencyGenerator(LatencyGenerator):
         self.capacity = capacity
 
     def __call__(self):
-        return self.rng.choice([(1, 1, self.capacity, 1), (2, 0, 1, 1)], p=[self.q, 1.0 - self.q])
+        return self.rng.choice(
+            [(1, 1, self.capacity, 1), (2, 0, 1, 1)], p=[self.q, 1.0 - self.q]
+        )
 
 
 def create_random_grid_network(
@@ -285,9 +409,7 @@ def create_random_grid_network(
     network.remove_edges_from(
         [
             edge
-            for edge, r in zip(
-                network.edges, rng.uniform(size=len(network.edges))
-            )
+            for edge, r in zip(network.edges, rng.uniform(size=len(network.edges)))
             if r > p
         ]
     )

@@ -187,18 +187,19 @@ def draw_latency_params(model, ax=None):
     )
 
 
-def draw_network(model, ax=None):
+def draw_network(network, ax=None):
     if ax is None:
         _, ax = plt.subplots()
 
     ax.set_title("Network")
+    ax.figure.set_size_inches(5, 5)
     nx.draw(
-        model.network,
+        network,
         ax=ax,
-        pos=nx.get_node_attributes(model.network, "position"),
+        pos=nx.get_node_attributes(network, "position"),
         with_labels=True,
         font_size=8,
-        edgelist=[(v, w) for v, w in model.network.edges if v != w]
+        edgelist=[(v, w) for v, w in network.edges if v != w]
     )
 
 
