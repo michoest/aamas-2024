@@ -653,7 +653,7 @@ def create_cars(network, car_counts, seed=42):
         feasible_edges = [
             edge
             for edge in network.edges
-            if nx.has_path(network, s, edge[0]) and nx.has_path(network, edge[1], t)
+            if nx.has_path(network, s, edge[0]) and nx.has_path(network, edge[1], t) and edge[0] != t
         ]
         latencies = [network.edges[edge]["latency_fn"](0) for edge in feasible_edges]
 
