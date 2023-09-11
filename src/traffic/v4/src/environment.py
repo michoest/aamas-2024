@@ -19,6 +19,7 @@ class Car:
         *,
         anticipation_strategy="route",
         created_at_step=0,
+        respawn=True,
         value_of_time=1,
         value_of_money=1,
         verbose=False,
@@ -35,12 +36,14 @@ class Car:
         self.target = target
         self.speed = speed
         self.created_at_step = created_at_step
+        self.respawn = respawn
         self.position = position if position is not None else ((source, source), 1.0)
         self.anticipation_strategy = anticipation_strategy
         self.value_of_time = value_of_time
         self.value_of_money = value_of_money
         self.verbose = verbose
         self.toll = 0.0
+        self.active = True
 
         # Initialize random generator
         self.rng = np.random.default_rng(seed)
@@ -124,20 +127,22 @@ class Car:
 
 class TrafficModel:
     def __init__(
-        self, network, cars, *, tolls=False, beta=0.5, R=0.1, verbose=False, seed=42
+        self, network, timetable, *, tolls=False, beta=0.5, R=0.1, verbose=False, seed=42
     ) -> None:
         self.network = network
-        self.cars = cars
+        self.cars = {}
+        self.timetable = timetable
         self.tolls = tolls
         self.beta = beta
         self.R = R
         self.verbose = verbose
 
         self._type = "undefined"
-        self.routes = {car_id: [] for car_id in self.cars}
+        self.routes = {car.id: [] for timestep in self.timetable.values() for car in timestep.values()}
         self.step_statistics = []
         self.car_statistics = []
         self.current_step = 0
+        self.total_cars = len(self.cars)
 
         # Initialize random generator
         self.rng = np.random.default_rng(seed)
@@ -240,7 +245,7 @@ class TrafficModel:
                 "anticipated_toll",
             )
 
-    def run_sequentially(self, number_of_steps, *, show_progress=True):
+    def run_sequentially(self, number_of_steps, *, show_progress=True, return_step_statistics=True):
         assert self._type in [
             "undefined",
             "sequentially",
@@ -249,9 +254,12 @@ class TrafficModel:
 
         routes_taken = {
             car.id: [car.position[0][0], car.position[0][1]]
-            for car in self.cars.values()
+            for timestep in self.timetable.values() for car in timestep.values()
         }
         for step in (trange if show_progress else range)(number_of_steps):
+            if step in self.timetable.keys():
+                self.cars.update(self.timetable[step])
+
             if self.verbose:
                 print(f"Step {step}:")
                 print(
@@ -267,12 +275,13 @@ class TrafficModel:
             )
             self.update_network_attributes()
 
-            self.step_statistics.append(
-                list(self.routes.values())
-                + list(nx.get_edge_attributes(self.network, "flow").values())
-                + list(nx.get_edge_attributes(self.network, "latency").values())
-                + list(nx.get_edge_attributes(self.network, "toll").values())
-            )
+            if return_step_statistics:
+                self.step_statistics.append(
+                    list(self.routes.values())
+                    + list(nx.get_edge_attributes(self.network, "flow").values())
+                    + list(nx.get_edge_attributes(self.network, "latency").values())
+                    + list(nx.get_edge_attributes(self.network, "toll").values())
+                )
 
             # if self.verbose:
             #     print(self)
@@ -294,9 +303,9 @@ class TrafficModel:
 
             # Re-spawn cars which have arrived
             for car in self.cars.values():
-                if car.position[0][0] == car.target or (
+                if car.active and (car.position[0][0] == car.target or (
                     car.position[0][1] == car.target and car.position[1] == 1.0
-                ):
+                )):
                     self.car_statistics.append(
                         {
                             "step": step,
@@ -319,8 +328,11 @@ class TrafficModel:
                             f"Car {car.id} reached its target after {step - car.created_at_step} steps."
                         )
 
-                    car.reset(car.source, car.target, step)
-                    routes_taken[car.id] = [car.source]
+                    if car.respawn:
+                        car.reset(car.source, car.target, step)
+                        routes_taken[car.id] = [car.source]
+                    else:
+                        car.active = False
 
             if self.verbose:
                 print(
@@ -336,18 +348,21 @@ class TrafficModel:
                 self.increase_flow(car.position[0])
                 routes_taken[car.id].append(car.position[0][1])
 
-            # if self.verbose:
-            #     print(self)
+        print(len(self.cars))
+        print(len([car for car in self.cars.values() if car.active]))
 
-        return pd.DataFrame(
-            self.step_statistics,
-            columns=pd.MultiIndex.from_tuples(
-                [("route", car_id) for car_id in self.cars]
-                + [("flow", edge_id) for edge_id in self.network.edges]
-                + [("latency", edge_id) for edge_id in self.network.edges]
-                + [("toll", edge_id) for edge_id in self.network.edges]
-            ),
-        ), pd.DataFrame(self.car_statistics)
+        if return_step_statistics:
+            return pd.DataFrame(
+                self.step_statistics,
+                columns=pd.MultiIndex.from_tuples(
+                    [("route", car_id) for car_id in self.routes]
+                    + [("flow", edge_id) for edge_id in self.network.edges]
+                    + [("latency", edge_id) for edge_id in self.network.edges]
+                    + [("toll", edge_id) for edge_id in self.network.edges]
+                ),
+            ), pd.DataFrame(self.car_statistics)
+        else:
+            return pd.DataFrame(self.car_statistics)
 
     def run_single_steps(self, number_of_steps):
         assert self._type in [
@@ -399,11 +414,11 @@ class TrafficModel:
         return pd.DataFrame(
             self.step_statistics,
             columns=pd.MultiIndex.from_tuples(
-                [("route", car_id) for car_id in self.cars]
+                [("route", car_id) for car_id in self.routes]
                 + [("flow", edge) for edge in self.network.edges]
                 + [("latency", edge) for edge in self.network.edges]
                 + [("toll", edge) for edge in self.network.edges]
-                + [("travel_time", car_id) for car_id in self.cars]
+                + [("travel_time", car_id) for car_id in self.routes]
             ),
         ), pd.DataFrame(self.car_statistics)
 
