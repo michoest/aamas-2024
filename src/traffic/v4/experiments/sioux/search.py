@@ -7,10 +7,10 @@ import numpy as np
 from src.traffic.v3.util.utils import save_or_extend_dataframe
 from src.traffic.v4.src.environment import build_network, create_cars, TrafficModel, Car
 
-seeds = [41, 42, 43, 44, 45, 46]
-network_path = 'data/sf1_net.txt'
-costs_path = 'data/sf1_c.txt'
-cars_path = 'data/sf1_dem.txt'
+seeds = [41, 42, 43, 44, 45]
+network_path = 'src/traffic/v4/experiments/sioux/data/sf1_net.txt'
+costs_path = 'src/traffic/v4/experiments/sioux/data/sf1_c.txt'
+cars_path = 'src/traffic/v4/experiments/sioux/data/sf1_dem.txt'
 
 
 def create_sioux_falls_network(network_path: str, costs_path: str, capacity=2, scaling: int = 60):
@@ -27,10 +27,10 @@ def create_sioux_falls_network(network_path: str, costs_path: str, capacity=2, s
         {
             (int(net[net.index == i]['init_node'].iloc[0]),
              int(net[net.index == i]['term_node'].iloc[0])): (scaling * edge['free_flow'],
-                                                              scaling * edge['free_flow'] * edge['b']
+                                                              scaling * edge['free_flow'] * edge['b'] * 10000
                                                               / (edge['capacity'] ** edge['power']),
                                                               capacity,
-                                                              4) for i, edge in c.iterrows()
+                                                              1) for i, edge in c.iterrows()
         },
         "latency_params",
     )
@@ -65,8 +65,8 @@ def create_sioux_falls_cars(path, network, max_steps, scaling: int = 10, seed=42
 
 
 def single_run(steps=300, edge=None, seed=42):
-    network = create_sioux_falls_network(network_path, costs_path, capacity=200, scaling=100)
-    model = TrafficModel(network, create_sioux_falls_cars(cars_path, network, 24 * 100, scaling=200, seed=seed),
+    network = create_sioux_falls_network(network_path, costs_path, capacity=50, scaling=100)
+    model = TrafficModel(network, create_sioux_falls_cars(cars_path, network, 300, scaling=20, seed=seed),
                          seed=seed)
 
     if edge is not None:
@@ -81,10 +81,10 @@ def find_braess(steps):
 
     results = pd.DataFrame(columns=['edge', 'improvement'])
 
-    for index, edge in enumerate(edges):
+    for index, edge in enumerate([(11, 4)]):
         print(f'Blocking edge {edge} ({index})')
-        pd.concat([results, pd.DataFrame({
-            'edge': edge,
+        results = pd.concat([results, pd.DataFrame({
+            'edge': [edge],
             'improvement': unrestricted_result - np.mean(
                 [single_run(steps, edge=edge, seed=seed)['travel_time'].mean() for seed in seeds])
         })])
