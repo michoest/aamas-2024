@@ -1,8 +1,6 @@
 # External modules
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
-import matplotlib.pyplot as plt
-import networkx as nx
 
 
 def compute_regression(data):
