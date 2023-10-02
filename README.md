@@ -11,7 +11,7 @@ Contains the definition of the traffic model and the agents (`environment.py`), 
 ## Installation
 To install the required dependencies, run
 ```
-$ pip install raise-the-bar
+$ pip install -r requirements.txt
 ```
 
 ## Execution
