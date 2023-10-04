@@ -1,24 +1,22 @@
 # External modules
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error
+import statsmodels.formula.api as sm
+from statsmodels.tools.eval_measures import mse
 
 
 def compute_regression(data):
-    lrr = LinearRegression()
-    est = lrr.fit(data.index.to_numpy().reshape(-1, 1), data.to_numpy())
-    error = mean_squared_error(
-        data.to_numpy(), lrr.predict(data.index.to_numpy().reshape(-1, 1))
-    )
-
-    return est.coef_[0], est.intercept_, error
+    ols = sm.ols(formula='travel_time ~ value_of_money', data=data).fit()
+    return ols.params['value_of_money'], ols.params['Intercept'], mse(
+        data['travel_time'],
+        ols.predict(data['value_of_money'])
+    ), ols.pvalues["value_of_money"]
 
 
 def analyze_fairness(car_stats, cutoff=0):
     data = (
         car_stats[car_stats["step"] >= cutoff]
         .groupby("value_of_money")["travel_time"]
-        .mean()
+        .mean().reset_index()
     )
-    slope, intercept, error = compute_regression(data)
+    slope, intercept, error, p_value = compute_regression(data)
 
-    return {"slope": slope, "error": error}
+    return {"slope": slope, "error": error, 'p': p_value}
